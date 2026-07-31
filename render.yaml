@@ -7,11 +7,9 @@ services:
     # disk (those require a paid instance). Cold starts (~1 min after idle)
     # are unchanged — that is the free-tier tradeoff.
     plan: free
-    buildCommand: |
-      pip install -r requirements.txt
-      curl -sL https://github.com/benbjohnson/litestream/releases/download/v0.5.15/litestream-0.5.15-linux-x86_64.tar.gz | tar xz
-      chmod +x litestream scripts/start.sh
-      ./litestream version
+    # Single-line commands only — Render's dashboard flattens pasted multiline
+    # blocks, which broke `pip install … curl -sL …` into one argv list.
+    buildCommand: bash scripts/build.sh
     startCommand: bash scripts/start.sh
     envVars:
       - key: ADMIN_PASSCODE_HASH

@@ -78,6 +78,12 @@ Edit litestream.yml in this repo and set:
 4. Confirm Settings → Instance Type is Free, and Disks is empty
    (we are not using a Render disk).
 
+5. Confirm Build & Deploy commands are EXACTLY these single lines
+   (do not paste a multiline block — Render flattens it and breaks pip):
+
+   Build Command:  bash scripts/build.sh
+   Start Command:  bash scripts/start.sh
+
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 5. Verify persistence after deploy
