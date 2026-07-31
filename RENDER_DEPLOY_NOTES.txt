@@ -1,0 +1,27 @@
+========================================
+5418 Book Club — Render Deploy Checklist
+========================================
+
+1. Go to https://dashboard.render.com/blueprints
+2. Click "New Blueprint Instance"
+3. Connect to your GitHub, pick the repo: owenzhang04/5418-bookclub
+4. Render will read render.yaml automatically
+5. Go to Environment → add:
+
+   ADMIN_PASSCODE_HASH:
+   $2b$12$cfUKbCM9E5p3.KT9OKZNteaExus3vcr097NksVMHohrimrhh1dkfu
+
+   SESSION_SECRET:
+   vU314ou12lYEWhi1axkBzeiD66s3F7Yp7HmuTJtYxWo
+
+6. Click "Apply" — first deploy ~3 minutes
+
+Post-deploy:
+- Visit https://5418-bookclub.onrender.com (or whatever URL Render gives you)
+- Admin login: passcode = 5418
+- Check RSVP form works
+- Add a meeting to verify DB persists
+
+NOTE: Free-tier filesystem is ephemeral. After every deploy,
+you'll need to re-seed the DB or use /admin/backup to download+restore.
+For $1/mo, Render persistent disk solves this.

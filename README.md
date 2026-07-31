@@ -4,7 +4,7 @@ A small deployed website for the 5418 Book Club (~15 members). Public landing sh
 
 ## Live site
 
-[https://5418-bookclub.onrender.com](https://5418-bookclub.onrender.com) *(after first deploy)*
+[https://five418-bookclub.onrender.com](https://five418-bookclub.onrender.com) *(after first deploy)*
 
 ## Features
 
