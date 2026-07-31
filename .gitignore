@@ -4,6 +4,8 @@
 # Runtime
 data/*.db
 data/*.db-journal
+data/*.db-shm
+data/*.db-wal
 __pycache__/
 *.pyc
 
@@ -17,3 +19,6 @@ __pycache__/
 .idea/
 .vscode/
 *.swp
+
+# Agent re-entry
+RESUME.md
