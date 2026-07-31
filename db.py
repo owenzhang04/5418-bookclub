@@ -562,11 +562,75 @@ def update_book_dates(
         )
 
 
+def update_book(
+    book_id: int,
+    *,
+    title: str,
+    author: str,
+    cover_url: str | None = None,
+    page_count: int | None = None,
+    publish_year: int | None = None,
+    started_on: str | None = None,
+    read_by: str | None = None,
+    finished_on: str | None = None,
+    notes: str | None = None,
+) -> None:
+    """Overwrite the editable fields on an existing book.
+
+    Callers validate; this writes whatever it's given. `open_library_key` is
+    left alone — corrections are about our copy of the metadata, not a new
+    Open Library lookup.
+    """
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE books SET
+                title = ?, author = ?, cover_url = ?, page_count = ?,
+                publish_year = ?, started_on = ?, read_by = ?, finished_on = ?,
+                notes = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                title,
+                author,
+                cover_url,
+                page_count,
+                publish_year,
+                started_on,
+                read_by,
+                finished_on,
+                notes,
+                now_iso(),
+                book_id,
+            ),
+        )
+
+
 def finish_book(book_id: int, finished_on: str | None = None) -> None:
     with get_db() as conn:
         conn.execute(
             "UPDATE books SET finished_on = ?, updated_at = ? WHERE id = ?",
             (finished_on or today_iso(), now_iso(), book_id),
+        )
+
+
+def make_book_current(book_id: int) -> None:
+    """Clear `finished_on` on this book and archive any other current book.
+
+    Same invariant as `set_current_book`: at most one row with
+    `finished_on IS NULL`. Done on one connection so a crash can't leave two.
+    """
+    now = now_iso()
+    archived_on = today_iso()
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE books SET finished_on = ?, updated_at = ? "
+            "WHERE finished_on IS NULL AND id != ?",
+            (archived_on, now, book_id),
+        )
+        conn.execute(
+            "UPDATE books SET finished_on = NULL, updated_at = ? WHERE id = ?",
+            (now, book_id),
         )
 
 
