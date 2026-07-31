@@ -1,0 +1,86 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>Edit past book</h1>
+<p><a class="muted" href="/admin/past">← Back to past books</a></p>
+
+{% if error %}
+  <div class="form-error">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/admin/past/{{ book.id }}" class="stack-form">
+  {# Values come from `form`, never straight from the row, so a rejected
+     field re-renders with everything else the admin typed still in place. #}
+  <label>
+    Title
+    <input type="text" name="title" value="{{ form.title }}" required maxlength="200" />
+  </label>
+
+  <label>
+    Author
+    <input type="text" name="author" value="{{ form.author }}" required maxlength="200" />
+  </label>
+
+  <label>
+    Cover URL (optional)
+    <input type="url" name="cover_url" value="{{ form.cover_url }}"
+           placeholder="https://…" maxlength="500" />
+  </label>
+
+  <label>
+    Page count (optional)
+    <input type="number" name="page_count" value="{{ form.page_count }}"
+           min="1" step="1" inputmode="numeric" />
+  </label>
+
+  <label>
+    Publish year (optional)
+    <input type="number" name="publish_year" value="{{ form.publish_year }}"
+           min="1" step="1" inputmode="numeric" />
+  </label>
+
+  <label>
+    Started on (optional)
+    <input type="date" name="started_on" value="{{ form.started_on }}" />
+  </label>
+
+  <label>
+    Read by (optional)
+    <input type="date" name="read_by" value="{{ form.read_by }}" />
+  </label>
+
+  <label>
+    Finished on
+    <input type="date" name="finished_on" value="{{ form.finished_on }}" required />
+  </label>
+  <p class="muted" style="margin: 0; font-size: 0.9rem;">
+    Finished on is required here — clearing it would make this the current book
+    again. Use “Return to current” below if that’s what you want.
+  </p>
+
+  <label>
+    Notes (optional)
+    <textarea name="notes" rows="4"
+              placeholder="Anything worth remembering about this book">{{ form.notes }}</textarea>
+  </label>
+
+  <div class="form-actions">
+    <button class="button" type="submit">Save changes</button>
+    <a class="button button--ghost" href="/admin/past">Cancel</a>
+  </div>
+</form>
+
+<section class="form-card form-card--wide" style="margin: 32px 0 0;">
+  <h2 class="section-title">Return to current</h2>
+  <p class="muted" style="margin-top: 0;">
+    Clears the finished date and makes this the book you’re reading now.
+    Whatever is currently being read will be archived.
+  </p>
+  <form method="post" action="/admin/past/{{ book.id }}/make-current" class="inline-form">
+    <button class="button button--ghost" type="submit"
+            onclick="return confirm('Make this the current book? The book you’re reading now will move to Past books.');">
+      Return to current →
+    </button>
+  </form>
+</section>
+{% endblock %}

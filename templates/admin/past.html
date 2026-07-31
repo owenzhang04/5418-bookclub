@@ -4,6 +4,10 @@
 <h1>Past books</h1>
 <p class="muted">An archive of books you've already read.</p>
 
+{% if saved %}
+  <div class="form-success" role="status">Saved.</div>
+{% endif %}
+
 {% if past %}
   <ul class="past-list">
     {% for b in past %}
@@ -28,6 +32,7 @@
           {% endif %}
         </div>
         <div class="past-actions">
+          <a href="/admin/past/{{ b.id }}/edit">Edit</a>
           <a class="muted" href="/admin/meetings">View meetings</a>
         </div>
       </li>
@@ -37,3 +42,4 @@
   <p class="muted">No past books yet. Mark a book as finished on the <a href="/admin/book">book page</a>.</p>
 {% endif %}
 {% endblock %}
+

@@ -604,7 +604,15 @@ input[type="search"]:focus {
   font-size: 0.95rem;
   line-height: 1.5;
 }
-.past-actions { align-self: start; font-size: 0.9rem; }
+.past-actions {
+  align-self: start;
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  text-align: right;
+}
 
 @media (max-width: 640px) {
   .past-row { grid-template-columns: 64px 1fr; }
