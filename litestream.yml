@@ -1,10 +1,11 @@
 # Litestream replicates the SQLite database to Backblaze B2 so data survives
 # Render free-tier spin-downs. Env vars are expanded automatically (see
 # https://litestream.io/reference/config/).
-#
-# IMPORTANT: set `endpoint` and `region` to match YOUR bucket. They appear on
-# the B2 bucket details page; the region is embedded in the endpoint hostname
-# (e.g. s3.us-west-004.backblazeb2.com → region us-west-004).
+
+# Idle "replica sync" lines are healthy but flood Render logs at info.
+# warn keeps uploads/errors visible without the 2s heartbeat.
+logging:
+  level: warn
 
 dbs:
   - path: ${BOOKCLUB_DB_PATH}
@@ -15,5 +16,7 @@ dbs:
       path: bookclub
       endpoint: s3.us-east-005.backblazeb2.com
       region: us-east-005
+      # 1s default is fine; 10s is enough for a book club and cuts API chatter.
+      sync-interval: 10s
       access-key-id: ${B2_KEY_ID}
       secret-access-key: ${B2_APPLICATION_KEY}
