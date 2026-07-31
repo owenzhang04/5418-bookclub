@@ -9,19 +9,21 @@
 {% endif %}
 
 <form method="post" action="{% if meeting %}/admin/meetings/{{ meeting.id }}{% else %}/admin/meetings{% endif %}" class="stack-form">
+  {# Values come from `form`, never straight from the row, so a rejected date
+     re-renders with everything else the admin typed still in place. #}
   <label>
     Date
-    <input type="date" name="date" value="{{ meeting.date if meeting else '' }}" required />
+    <input type="date" name="date" value="{{ form.date }}" required />
   </label>
 
   <label>
     Time (optional)
-    <input type="time" name="time" value="{{ meeting.time if meeting and meeting.time else '' }}" />
+    <input type="time" name="time" value="{{ form.time }}" />
   </label>
 
   <label>
     Location (optional)
-    <input type="text" name="location" value="{{ meeting.location if meeting and meeting.location else '' }}"
+    <input type="text" name="location" value="{{ form.location }}"
            placeholder="e.g. Oz's place, or a venue" maxlength="120" />
   </label>
 
@@ -31,7 +33,7 @@
       <option value="">— No specific book —</option>
       {% for b in books %}
         <option value="{{ b.id }}"
-                {% if meeting and meeting.book_id == b.id %}selected{% endif %}>
+                {% if form.book_id == b.id %}selected{% endif %}>
           {{ b.title }} — {{ b.author }}
           {% if b.finished_on %}(finished {{ b.finished_on }}){% else %}(current){% endif %}
         </option>
@@ -42,13 +44,13 @@
   <label>
     Agenda (optional)
     <textarea name="agenda" rows="3"
-              placeholder="What we'll cover, what to bring, etc.">{{ meeting.agenda if meeting and meeting.agenda else '' }}</textarea>
+              placeholder="What we'll cover, what to bring, etc.">{{ form.agenda }}</textarea>
   </label>
 
   <label>
     Discussion questions (optional, one per line)
     <textarea name="discussion_questions" rows="5"
-              placeholder="One question per line">{{ meeting.discussion_questions if meeting and meeting.discussion_questions else '' }}</textarea>
+              placeholder="One question per line">{{ form.discussion_questions }}</textarea>
   </label>
 
   <div class="form-actions">

@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 
+{% block title %}{% if current %}{{ club.name }} — now reading {{ current.title }}{% else %}{{ club.name }}{% endif %}{% endblock %}
+{% block og_title %}{% if current %}{{ club.name }} — now reading {{ current.title }}{% else %}{{ club.name }}{% endif %}{% endblock %}
+{% block og_description %}{% if current %}Currently reading {{ current.title }} by {{ current.author }}.{% else %}Upcoming meetings and RSVPs for {{ club.name }}.{% endif %}{% endblock %}
+{% block meta_description %}{% if current %}{{ club.name }} is reading {{ current.title }} by {{ current.author }}.{% else %}{{ club.name }} — current book, upcoming meetings, and RSVPs.{% endif %}{% endblock %}
+
 {% block content %}
 
 {# Current book hero #}
@@ -7,7 +12,11 @@
   <section class="hero">
     <div class="hero-cover">
       {% if current.cover_url %}
-        <img src="{{ current.cover_url }}" alt="Cover of {{ current.title }}" />
+        <img
+          src="{{ current.cover_url }}"
+          alt="Cover of {{ current.title }}"
+          onerror="this.onerror=null;this.src='/static/img/cover-placeholder.svg'"
+        />
       {% else %}
         <div class="cover-placeholder">{{ current.title[:1] }}</div>
       {% endif %}
@@ -19,8 +28,8 @@
       <ul class="hero-stats">
         {% if current.page_count %}<li><strong>{{ current.page_count }}</strong> pages</li>{% endif %}
         {% if current.publish_year %}<li>first published <strong>{{ current.publish_year }}</strong></li>{% endif %}
-        {% if current.started_on %}<li>started <strong>{{ current.started_on }}</strong></li>{% endif %}
-        {% if current.read_by %}<li>read by <strong>{{ current.read_by }}</strong></li>{% endif %}
+        {% if current.started_on %}<li>started <strong>{{ current.started_on|humandate }}</strong></li>{% endif %}
+        {% if current.read_by %}<li>read by <strong>{{ current.read_by|humandate }}</strong></li>{% endif %}
       </ul>
       {% if countdown %}
         <div class="hero-countdown hero-countdown--{{ countdown.bucket }}">
@@ -75,7 +84,15 @@
       {% endfor %}
     </div>
   {% else %}
-    <p class="muted">No meetings scheduled yet.</p>
+    <div class="empty-state">
+      <p class="muted">No meetings scheduled yet.</p>
+      {% if is_admin %}
+        <p><a class="button" href="/admin/meetings/new">Schedule the next meeting →</a></p>
+      {% else %}
+        <p class="muted">Check the <a href="/past">past books archive</a>, or ask an admin when the next one is.</p>
+        <p><a class="button button--ghost" href="/past">Browse past books →</a></p>
+      {% endif %}
+    </div>
   {% endif %}
 </section>
 
@@ -87,7 +104,7 @@
       {% for b in past_books %}
         <li>
           <span class="past-title">{{ b.title }}</span>
-          <span class="muted"> — {{ b.author }} · finished {{ b.finished_on }}</span>
+          <span class="muted"> — {{ b.author }} · finished {{ b.finished_on|humandate }}</span>
         </li>
       {% endfor %}
     </ul>

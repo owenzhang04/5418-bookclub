@@ -5,13 +5,14 @@
   --bg-soft: #efe7d8;     /* slightly deeper cream */
   --ink: #2b1f17;         /* near-black brown */
   --ink-soft: #5a4a3c;    /* softer body */
-  --muted: #8a7a6a;       /* muted captions */
+  --muted: #6d5d4e;       /* muted captions — AA on --bg */
   --accent: #b14a25;      /* warm sienna */
-  --accent-soft: #d97a55;
+  --accent-soft: #8f3a1c; /* darker on hover so contrast holds */
   --yes: #2f7a4a;
-  --maybe: #b7851b;
+  --maybe: #8a6410;       /* amber that clears AA on white */
   --no: #a23a2e;
   --border: #d9cdb8;
+  --border-strong: #b3a488;
   --radius: 8px;
   --shadow: 0 1px 3px rgba(43, 31, 23, 0.08);
   --shadow-lift: 0 6px 20px rgba(43, 31, 23, 0.12);
@@ -210,7 +211,16 @@ em { font-style: italic; }
 .rsvp-yes { color: var(--yes); font-weight: 500; }
 .rsvp-maybe { color: var(--maybe); font-weight: 500; }
 .rsvp-no { color: var(--no); font-weight: 500; }
-.card-link { font-size: 0.92rem; font-weight: 500; }
+.card-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 0;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+.empty-state { margin-top: 8px; }
+.empty-state .button { margin-top: 8px; }
 
 /* ---- Past books list ---- */
 
@@ -290,25 +300,45 @@ em { font-style: italic; }
 .stack-form input[type="password"],
 .stack-form input[type="text"],
 .stack-form input[type="search"],
+.stack-form input[type="date"],
+.stack-form input[type="time"],
+.stack-form input[type="file"],
+.stack-form select,
+.stack-form textarea,
+.inline-form input[type="text"],
 input[type="search"] {
   font: inherit;
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--ink);
   width: 100%;
 }
-.stack-form input:focus,
-input[type="search"]:focus {
+:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
+}
+.stack-form input:focus,
+.stack-form select:focus,
+.stack-form textarea:focus,
+.inline-form input:focus,
+input[type="search"]:focus {
   border-color: var(--accent);
 }
 .form-error {
   background: #fdecea;
   color: var(--no);
   border: 1px solid #f3c5be;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  font-size: 0.92rem;
+}
+.form-success {
+  background: #eaf4ee;
+  color: var(--yes);
+  border: 1px solid #bcdcc7;
   padding: 10px 12px;
   border-radius: var(--radius);
   margin-bottom: 14px;
@@ -433,7 +463,23 @@ input[type="search"]:focus {
   border-radius: var(--radius);
   margin-bottom: 8px;
 }
-.admin-list-actions { display: flex; gap: 12px; align-items: center; font-size: 0.9rem; }
+.admin-list-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 0.9rem;
+  flex-wrap: wrap;
+}
+.admin-list-actions a,
+.admin-list-actions .link-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 4px;
+}
+.admin-list-actions .link-button--danger {
+  margin-left: auto;
+}
 .link-button--danger { color: var(--no); }
 .link-button--danger:hover { color: #d44a3a; }
 

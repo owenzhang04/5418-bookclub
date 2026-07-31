@@ -8,30 +8,100 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tempfile
+from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from pathlib import Path
+from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 
 # Load .env before anything that reads env vars (auth, books).
 load_dotenv(BASE_DIR := Path(__file__).parent / ".env")
 
-from fastapi import FastAPI, Form, HTTPException, Query, Request, status  # noqa: E402
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import (  # noqa: E402
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+from fastapi.responses import (  # noqa: E402
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+)
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from fastapi.templating import Jinja2Templates  # noqa: E402
+from starlette.background import BackgroundTask  # noqa: E402
+from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: E402
 
-import auth
-import books
-import db
+import auth  # noqa: E402
+import books  # noqa: E402
+import db  # noqa: E402
 
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
-app = FastAPI(title="5418 Book Club")
+# Matches `maxlength` on the RSVP form. The browser's version is a courtesy;
+# this is the one that counts.
+MAX_NAME_LENGTH = 80
+
+# Paths that answer in JSON. Everything else gets an HTML error page.
+JSON_PATHS = ("/healthz",)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown, in the shape FastAPI intends.
+
+    `@app.on_event` is deprecated; when it eventually goes away, an unrelated
+    commit would fail at import and take `init_db()` with it.
+    """
+    db.init_db()
+    db.ensure_club()
+    db.seed()
+    yield
+    # Fold the WAL back into the main .db file so Litestream (and any backup
+    # download) sees a complete single-file database.
+    db.checkpoint()
+
+
+# `docs_url`/`openapi_url` off: the schema published every admin route on a
+# site whose whole privacy model is "unlisted, not secret".
+app = FastAPI(
+    title="5418 Book Club",
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+def _humandate(value: str | None) -> str:
+    """Turn `YYYY-MM-DD` (or an ISO timestamp) into `Mon 3 Aug`."""
+    if not value:
+        return ""
+    try:
+        d = date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return str(value)
+    return f"{d.strftime('%a')} {d.day} {d.strftime('%b')}"
+
+
+templates.env.filters["humandate"] = _humandate
+
+# Sentinel for the RSVP roster "Someone else" option.
+RSVP_GUEST = "__guest__"
 
 
 # Make `is_admin` available in every template without threading it through
@@ -50,35 +120,102 @@ def _render(
     )
 
 
-@app.on_event("startup")
-def _startup() -> None:
-    db.init_db()
-    db.ensure_club()
-    db.seed()
+# ---------------------------------------------------------------------------
+# Errors
+# ---------------------------------------------------------------------------
+
+_ERROR_TITLES = {
+    400: "That didn't look right",
+    401: "Not signed in",
+    403: "Not allowed",
+    404: "Nothing here",
+    429: "Slow down a moment",
+    500: "Something broke",
+}
+
+
+def _error_page(request: Request, status_code: int, detail: str) -> HTMLResponse:
+    """Render the styled error page, degrading to plain text if the DB is down.
+
+    `_render` reads the club name, so it can raise — and a 404 that turns into
+    an unhandled 500 inside the error handler is a confusing way to find out
+    the disk is full.
+    """
+    try:
+        return _render(
+            request,
+            "error.html",
+            club=db.ensure_club(),
+            status_code=status_code,
+            code=status_code,
+            title=_ERROR_TITLES.get(status_code, "Something went wrong"),
+            detail=detail,
+        )
+    except Exception:  # pragma: no cover — only when SQLite itself is unhappy
+        return PlainTextResponse(f"{status_code}: {detail}", status_code=status_code)
+
+
+@app.exception_handler(StarletteHTTPException)
+def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """HTML for humans, JSON for the endpoints that speak it.
+
+    Redirects arrive here too — `auth.require_admin` signals "go log in" by
+    raising a 302 with a Location header — so those have to pass through
+    untouched rather than being rendered as a page.
+    """
+    if 300 <= exc.status_code < 400:
+        location = (exc.headers or {}).get("Location", "/")
+        return RedirectResponse(url=location, status_code=exc.status_code)
+    detail = str(exc.detail or _ERROR_TITLES.get(exc.status_code, ""))
+    if request.url.path in JSON_PATHS:
+        return JSONResponse({"detail": detail}, status_code=exc.status_code)
+    response = _error_page(request, exc.status_code, detail)
+    for key, value in (exc.headers or {}).items():
+        response.headers[key] = value
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Turn Pydantic's blob into a sentence.
+
+    A bad path segment (`/meetings/abc`) is really a 404 — that URL was never
+    going to exist. A bad form field is the sender's mistake, so 400.
+    """
+    in_path = any((error.get("loc") or [None])[0] == "path" for error in exc.errors())
+    if in_path:
+        return _error_page(request, 404, "That page doesn't exist.")
+    return _error_page(
+        request, 400, "Something was missing or malformed in that form."
+    )
 
 
 # ---------------------------------------------------------------------------
-# Health
+# Health + crawlers
 # ---------------------------------------------------------------------------
 
 
 @app.get("/healthz")
 def healthz() -> dict:
+    """Liveness probe. Deliberately says nothing about the club.
+
+    It used to return the club name and a row count per table, on a public
+    unauthenticated URL. `SELECT 1` still proves the process can reach its
+    database, which is the only thing a health check needs to know.
+    """
     with db.get_db() as conn:
-        books_count = conn.execute("SELECT COUNT(*) AS n FROM books").fetchone()["n"]
-        meetings_count = conn.execute("SELECT COUNT(*) AS n FROM meetings").fetchone()["n"]
-        rsvps_count = conn.execute("SELECT COUNT(*) AS n FROM rsvps").fetchone()["n"]
-        members_count = conn.execute("SELECT COUNT(*) AS n FROM members").fetchone()["n"]
-    return {
-        "status": "ok",
-        "club": db.ensure_club()["name"],
-        "counts": {
-            "books": books_count,
-            "meetings": meetings_count,
-            "rsvps": rsvps_count,
-            "members": members_count,
-        },
-    }
+        conn.execute("SELECT 1").fetchone()
+    return {"ok": True}
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots() -> str:
+    """Keep the club out of search results.
+
+    Meeting pages carry someone's home address. The pages stay publicly
+    linkable — that's the point of them — they just shouldn't be findable.
+    """
+    return "User-agent: *\nDisallow: /\n"
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +251,7 @@ def _read_by_countdown(current) -> dict | None:
         read_by = date.fromisoformat(current["read_by"])
     except (TypeError, ValueError):
         return None
-    days = (read_by - date.today()).days
+    days = (read_by - date.fromisoformat(db.today_iso())).days
     if days < 0:
         bucket = "overdue"
     elif days <= 7:
@@ -153,8 +290,28 @@ def login_post(
     request: Request,
     passcode: str = Form(...),
     next: str = Form(default="/admin"),
-) -> RedirectResponse:
+):
+    ip = auth.client_ip(request)
+    wait_seconds = auth.LOGIN_LIMITER.retry_after(ip)
+    if wait_seconds:
+        # Before `check_passcode`, not after: bcrypt at cost 12 is the expensive
+        # part, and letting attempts through to it is both the brute-force hole
+        # and a way to saturate the threadpool on a 0.5-CPU instance.
+        response = _render(
+            request,
+            "login.html",
+            club=db.ensure_club(),
+            next=next,
+            error=(
+                "Too many tries from your network. Wait "
+                f"{auth.retry_after_phrase(wait_seconds)} and try again."
+            ),
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+        response.headers["Retry-After"] = str(wait_seconds)
+        return response
     if not auth.check_passcode(passcode):
+        auth.LOGIN_LIMITER.record(ip)
         # Re-render the form with an error. 401 + re-display is more
         # user-friendly than a bare redirect.
         club = db.ensure_club()
@@ -166,6 +323,9 @@ def login_post(
             error="Wrong passcode. Try again.",
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
+    # Whoever this is knows the passcode; don't hold their earlier typos
+    # against them.
+    auth.LOGIN_LIMITER.reset(ip)
     target = next or "/admin"
     # Same-origin check: don't get tricked into a phishing redirect.
     if not target.startswith("/") or target.startswith("//"):
@@ -176,9 +336,9 @@ def login_post(
 
 
 @app.post("/logout")
-def logout() -> RedirectResponse:
+def logout(request: Request) -> RedirectResponse:
     resp = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    auth.clear_session_cookie(resp)
+    auth.clear_session_cookie(request, resp)
     return resp
 
 
@@ -213,11 +373,79 @@ def admin_home(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
     )
 
 
+def _parse_date(value: str | None) -> str | None:
+    """Normalize a form date to `YYYY-MM-DD`, or None when it's blank.
+
+    Blank means "not set" — clearing a date is a legitimate edit. Raises
+    `ValueError` for anything present but not a real calendar date, so the
+    caller can show the admin an error instead of writing junk.
+    """
+    if value is None or value.strip() == "":
+        return None
+    return date.fromisoformat(value.strip()).isoformat()
+
+
+def _render_admin_book(
+    request: Request,
+    *,
+    started_on: str | None,
+    read_by: str | None,
+    error: str | None = None,
+    status_code: int = 200,
+) -> HTMLResponse:
+    return _render(
+        request,
+        "admin/book.html",
+        club=db.ensure_club(),
+        current=db.get_current_book(),
+        form_started_on=started_on or "",
+        form_read_by=read_by or "",
+        error=error,
+        status_code=status_code,
+    )
+
+
 @app.get("/admin/book", response_class=HTMLResponse)
 def admin_book(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
-    club = db.ensure_club()
     current = db.get_current_book()
-    return _render(request, "admin/book.html", club=club, current=current)
+    return _render_admin_book(
+        request,
+        started_on=current["started_on"] if current else None,
+        read_by=current["read_by"] if current else None,
+    )
+
+
+@app.post("/admin/book/dates")
+def admin_book_dates(
+    request: Request,
+    started_on: str = Form(default=""),
+    read_by: str = Form(default=""),
+    _gate: auth.AdminGate = ...,
+) -> HTMLResponse:
+    current = db.get_current_book()
+    if current is None:
+        raise HTTPException(status_code=404, detail="No current book to edit.")
+    try:
+        start = _parse_date(started_on)
+        end = _parse_date(read_by)
+    except ValueError:
+        return _render_admin_book(
+            request,
+            started_on=started_on,
+            read_by=read_by,
+            error="Dates need to be real calendar dates (YYYY-MM-DD).",
+            status_code=400,
+        )
+    if start and end and end < start:
+        return _render_admin_book(
+            request,
+            started_on=started_on,
+            read_by=read_by,
+            error="The read-by date can't be before the start date.",
+            status_code=400,
+        )
+    db.update_book_dates(current["id"], started_on=start, read_by=end)
+    return RedirectResponse(url="/admin/book", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/admin/book/search", response_class=HTMLResponse)
@@ -255,12 +483,13 @@ def admin_book_set(
     page_count: str = Form(default=""),
     _gate: auth.AdminGate = ...,
 ) -> RedirectResponse:
-    # Optional dates the admin can set later; for now, "started_on = today"
-    # and "read_by = today + 30 days" as a sensible default. They can
-    # change them via the DB or a future edit page.
-    today = date.today().isoformat()
-    read_by = (date.today() + timedelta(days=30)).isoformat()
-    db.add_book(
+    # Dates default to "started today, read by a month from today"; the Reading
+    # dates card on /admin/book edits them afterwards.
+    today = db.today_iso()
+    read_by = (date.fromisoformat(today) + timedelta(days=30)).isoformat()
+    # Archives whatever was current in the same transaction — see
+    # `db.set_current_book`.
+    db.set_current_book(
         title=title,
         author=author,
         open_library_key=open_library_key or None,
@@ -286,6 +515,10 @@ def admin_book_finish(_gate: auth.AdminGate) -> RedirectResponse:
 # Public: meeting detail + RSVP
 # ---------------------------------------------------------------------------
 
+# The three responses the schema's CHECK constraint allows, and how to say them
+# out loud. Membership of this dict is the validation for both RSVP routes.
+RESPONSE_LABELS = {"yes": "going", "no": "not going", "maybe": "maybe"}
+
 
 @app.get("/meetings/{meeting_id}", response_class=HTMLResponse)
 def meeting_detail(request: Request, meeting_id: int) -> HTMLResponse:
@@ -308,48 +541,121 @@ def meeting_detail(request: Request, meeting_id: int) -> HTMLResponse:
     )
 
 
+def _rsvp_page(
+    request: Request,
+    *,
+    selected_id: int | None = None,
+    roster_name: str = "",
+    guest_name: str = "",
+    response: str = "",
+    error: str | None = None,
+    status_code: int = 200,
+) -> HTMLResponse:
+    meetings = db.list_upcoming_meetings(limit=12)
+    selected = None
+    if selected_id is not None:
+        for m in meetings:
+            if m["id"] == selected_id:
+                selected = m
+                break
+    existing = None
+    chosen = (
+        roster_name
+        if roster_name and roster_name != RSVP_GUEST
+        else guest_name
+    )
+    chosen = db.normalize_name(chosen)
+    if selected is not None and chosen:
+        existing = db.get_rsvp(selected["id"], chosen)
+    return _render(
+        request,
+        "rsvp.html",
+        club=db.ensure_club(),
+        meetings=meetings,
+        members=db.list_members(),
+        selected=selected,
+        roster_name=roster_name,
+        guest_name=guest_name,
+        form_response=response,
+        existing=existing,
+        guest_sentinel=RSVP_GUEST,
+        error=error,
+        status_code=status_code,
+    )
+
+
 @app.get("/rsvp", response_class=HTMLResponse)
 def rsvp_get(
     request: Request,
     meeting: int | None = Query(default=None),
 ) -> HTMLResponse:
-    club = db.ensure_club()
-    meetings = db.list_upcoming_meetings(limit=12)
-    selected = None
-    if meeting is not None:
-        for m in meetings:
-            if m["id"] == meeting:
-                selected = m
-                break
-    return _render(
-        request,
-        "rsvp.html",
-        club=club,
-        meetings=meetings,
-        selected=selected,
-    )
+    return _rsvp_page(request, selected_id=meeting)
 
 
 @app.post("/rsvp")
 def rsvp_post(
     request: Request,
     meeting_id: int = Form(...),
-    name: str = Form(...),
     response: str = Form(...),
-) -> RedirectResponse:
-    name = (name or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Name is required")
-    if response not in ("yes", "no", "maybe"):
-        raise HTTPException(status_code=400, detail="Invalid response")
+    # Roster select posts here; free-text / API clients use `name`.
+    roster_name: str = Form(default=""),
+    name: str = Form(default=""),
+):
+    ip = auth.client_ip(request)
+    wait_seconds = auth.RSVP_LIMITER.retry_after(ip)
+    if wait_seconds:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "That's a lot of RSVPs at once. Try again in "
+                f"{auth.retry_after_phrase(wait_seconds)}."
+            ),
+            headers={"Retry-After": str(wait_seconds)},
+        )
+
+    # Count every attempt against the throttle, including bad ones — otherwise
+    # a junk loop never pays the cost.
+    auth.RSVP_LIMITER.record(ip)
+
+    if roster_name and roster_name != RSVP_GUEST:
+        chosen = roster_name
+        guest_name = ""
+    else:
+        chosen = name
+        guest_name = name
+        roster_name = RSVP_GUEST if db.list_members() else ""
+
+    chosen = db.normalize_name(chosen)
+
+    def fail(message: str):
+        return _rsvp_page(
+            request,
+            selected_id=meeting_id,
+            roster_name=roster_name,
+            guest_name=guest_name,
+            response=response if response in RESPONSE_LABELS else "",
+            error=message,
+            status_code=400,
+        )
+
+    if not chosen:
+        return fail("Pick your name from the list, or type it below.")
+    if len(chosen) > MAX_NAME_LENGTH:
+        return fail(f"Names have to be {MAX_NAME_LENGTH} characters or fewer.")
+    if response not in RESPONSE_LABELS:
+        return fail("Pick yes, maybe, or no.")
     meeting = db.get_meeting(meeting_id)
     if meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting["date"] < db.today_iso():
-        raise HTTPException(status_code=400, detail="That meeting has already passed")
-    db.upsert_rsvp(meeting_id, name, response)
+        return fail("That meeting has already passed.")
+
+    db.upsert_rsvp(meeting_id, chosen, response)
+    # urlencode, not an f-string: `Tom & Jerry` used to arrive as `Tom ` and
+    # `Bob#1` as a validation error, on an RSVP that had actually saved.
+    query = urlencode({"meeting": meeting_id, "name": chosen, "response": response})
     return RedirectResponse(
-        url=f"/rsvp/thanks?meeting={meeting_id}&name={name}&response={response}",
+        url=f"/rsvp/thanks?{query}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -365,7 +671,14 @@ def rsvp_thanks(
     m = db.get_meeting(meeting)
     if m is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    response_label = {"yes": "going", "no": "not going", "maybe": "maybe"}[response]
+    # `.get`, not `[...]`: these are raw query params, and an unknown one used
+    # to be a 500 for whoever typed the URL.
+    response_label = RESPONSE_LABELS.get(response)
+    if response_label is None:
+        raise HTTPException(status_code=400, detail="Invalid response")
+    name = db.normalize_name(name)
+    if not name or len(name) > MAX_NAME_LENGTH:
+        raise HTTPException(status_code=400, detail="Invalid name")
     return _render(
         request,
         "rsvp_thanks.html",
@@ -400,6 +713,84 @@ def _parse_int(value: str | None) -> int | None:
         return None
 
 
+def _meeting_form(
+    *,
+    date: str = "",
+    time: str = "",
+    location: str = "",
+    book_id: int | None = None,
+    agenda: str = "",
+    discussion_questions: str = "",
+) -> dict:
+    """The meeting form's fields, so an error re-render can hand them all back.
+
+    Rebuilding the form from the database would throw away whatever the admin
+    had just typed — including a long agenda — as the price of one bad date.
+    """
+    return {
+        "date": date,
+        "time": time,
+        "location": location,
+        "book_id": book_id,
+        "agenda": agenda,
+        "discussion_questions": discussion_questions,
+    }
+
+
+def _meeting_form_from_row(meeting: sqlite3.Row) -> dict:
+    return _meeting_form(
+        date=meeting["date"] or "",
+        time=meeting["time"] or "",
+        location=meeting["location"] or "",
+        book_id=meeting["book_id"],
+        agenda=meeting["agenda"] or "",
+        discussion_questions=meeting["discussion_questions"] or "",
+    )
+
+
+def _render_meeting_form(
+    request: Request,
+    *,
+    meeting: sqlite3.Row | None,
+    form: dict,
+    error: str | None = None,
+    status_code: int = 200,
+) -> HTMLResponse:
+    return _render(
+        request,
+        "admin/meeting_form.html",
+        club=db.ensure_club(),
+        meeting=meeting,
+        books=_all_books_for_admin(),
+        form=form,
+        error=error,
+        status_code=status_code,
+    )
+
+
+def _validate_meeting_form(form: dict) -> str | None:
+    """Return the error to show the admin, or None if the form is usable.
+
+    Mutates `form["date"]` into canonical `YYYY-MM-DD` on success. The date is
+    stored as TEXT and compared as TEXT, so `07/15/2026` doesn't just render as
+    junk on the homepage — it sorts below today forever, and the meeting is
+    gone. Better to refuse it while the admin is still looking at the form.
+    """
+    if not (form["date"] or "").strip():
+        return "Meetings need a date."
+    try:
+        parsed = _parse_date(form["date"])
+    except ValueError:
+        return (
+            f"“{form['date']}” isn't a date we can use. "
+            "Pick one from the picker, or type it as YYYY-MM-DD."
+        )
+    form["date"] = parsed
+    if form["book_id"] is not None and db.get_book(form["book_id"]) is None:
+        return "That book no longer exists — pick another, or leave it blank."
+    return None
+
+
 @app.get("/admin/meetings", response_class=HTMLResponse)
 def admin_meetings(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
     club = db.ensure_club()
@@ -416,15 +807,7 @@ def admin_meetings(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
 
 @app.get("/admin/meetings/new", response_class=HTMLResponse)
 def admin_meetings_new(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
-    club = db.ensure_club()
-    return _render(
-        request,
-        "admin/meeting_form.html",
-        club=club,
-        meeting=None,
-        books=_all_books_for_admin(),
-        error=None,
-    )
+    return _render_meeting_form(request, meeting=None, form=_meeting_form())
 
 
 @app.post("/admin/meetings")
@@ -437,16 +820,35 @@ def admin_meetings_create(
     agenda: str = Form(default=""),
     discussion_questions: str = Form(default=""),
     _gate: auth.AdminGate = ...,
-) -> RedirectResponse:
-    book_id_int = _parse_int(book_id)
-    db.add_meeting(
-        book_id=book_id_int,
+):
+    form = _meeting_form(
         date=date,
-        time=time.strip() or None,
-        location=location.strip() or None,
-        agenda=agenda.strip() or None,
-        discussion_questions=discussion_questions.strip() or None,
+        time=time.strip(),
+        location=location.strip(),
+        book_id=_parse_int(book_id),
+        agenda=agenda.strip(),
+        discussion_questions=discussion_questions.strip(),
     )
+    error = _validate_meeting_form(form)
+    if error is None:
+        try:
+            db.add_meeting(
+                book_id=form["book_id"],
+                date=form["date"],
+                time=form["time"] or None,
+                location=form["location"] or None,
+                agenda=form["agenda"] or None,
+                discussion_questions=form["discussion_questions"] or None,
+            )
+        except sqlite3.IntegrityError:
+            # The book was there when we checked and gone by the time we wrote:
+            # deleted in another tab, most likely.
+            error = "That book no longer exists — pick another, or leave it blank."
+    if error is not None:
+        form["date"] = date
+        return _render_meeting_form(
+            request, meeting=None, form=form, error=error, status_code=400
+        )
     return RedirectResponse(url="/admin/meetings", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -456,17 +858,11 @@ def admin_meetings_edit(
     meeting_id: int,
     _gate: auth.AdminGate,
 ) -> HTMLResponse:
-    club = db.ensure_club()
     meeting = db.get_meeting(meeting_id)
     if meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    return _render(
-        request,
-        "admin/meeting_form.html",
-        club=club,
-        meeting=meeting,
-        books=_all_books_for_admin(),
-        error=None,
+    return _render_meeting_form(
+        request, meeting=meeting, form=_meeting_form_from_row(meeting)
     )
 
 
@@ -481,20 +877,37 @@ def admin_meetings_update(
     agenda: str = Form(default=""),
     discussion_questions: str = Form(default=""),
     _gate: auth.AdminGate = ...,
-) -> RedirectResponse:
+):
     meeting = db.get_meeting(meeting_id)
     if meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    book_id_int = _parse_int(book_id)
-    db.update_meeting(
-        meeting_id,
-        book_id=book_id_int,
+    form = _meeting_form(
         date=date,
-        time=time.strip() or None,
-        location=location.strip() or None,
-        agenda=agenda.strip() or None,
-        discussion_questions=discussion_questions.strip() or None,
+        time=time.strip(),
+        location=location.strip(),
+        book_id=_parse_int(book_id),
+        agenda=agenda.strip(),
+        discussion_questions=discussion_questions.strip(),
     )
+    error = _validate_meeting_form(form)
+    if error is None:
+        try:
+            db.update_meeting(
+                meeting_id,
+                book_id=form["book_id"],
+                date=form["date"],
+                time=form["time"] or None,
+                location=form["location"] or None,
+                agenda=form["agenda"] or None,
+                discussion_questions=form["discussion_questions"] or None,
+            )
+        except sqlite3.IntegrityError:
+            error = "That book no longer exists — pick another, or leave it blank."
+    if error is not None:
+        form["date"] = date
+        return _render_meeting_form(
+            request, meeting=meeting, form=form, error=error, status_code=400
+        )
     return RedirectResponse(url="/admin/meetings", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -568,19 +981,12 @@ def public_past(request: Request) -> HTMLResponse:
 def admin_past(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
     club = db.ensure_club()
     past = db.list_past_books()
-    counts: dict[int, int] = {}
-    for b in past:
-        with db.get_db() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM meetings WHERE book_id = ?", (b["id"],)
-            ).fetchone()
-            counts[b["id"]] = row["n"] if row else 0
     return _render(
         request,
         "admin/past.html",
         club=club,
         past=past,
-        meeting_count_by_book=counts,
+        meeting_count_by_book=db.meeting_counts_by_book(b["id"] for b in past),
     )
 
 
@@ -590,14 +996,19 @@ def admin_past(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
 
 
 @app.get("/admin/members", response_class=HTMLResponse)
-def admin_members(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
-    club = db.ensure_club()
+def admin_members(
+    request: Request,
+    _gate: auth.AdminGate,
+    saved: int | None = Query(default=None),
+) -> HTMLResponse:
     return _render(
         request,
         "admin/members.html",
-        club=club,
+        club=db.ensure_club(),
         members=db.list_members(),
         error=None,
+        form_name="",
+        saved=bool(saved),
     )
 
 
@@ -607,7 +1018,7 @@ def admin_members_add(
     name: str = Form(...),
     _gate: auth.AdminGate = ...,
 ) -> HTMLResponse:
-    cleaned = (name or "").strip()
+    cleaned = db.normalize_name(name)
     if not cleaned:
         return _render(
             request,
@@ -615,6 +1026,8 @@ def admin_members_add(
             club=db.ensure_club(),
             members=db.list_members(),
             error="Name can't be empty.",
+            form_name=name,
+            saved=False,
             status_code=400,
         )
     try:
@@ -626,9 +1039,14 @@ def admin_members_add(
             club=db.ensure_club(),
             members=db.list_members(),
             error=f"'{cleaned}' is already on the roster.",
+            form_name=cleaned,
+            saved=False,
             status_code=400,
         )
-    return RedirectResponse(url="/admin/members", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url="/admin/members?saved=1",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @app.post("/admin/members/{member_id}/delete")
@@ -637,40 +1055,117 @@ def admin_members_delete(
     _gate: auth.AdminGate,
 ) -> RedirectResponse:
     db.delete_member(member_id)
-    return RedirectResponse(url="/admin/members", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url="/admin/members?saved=1",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Admin: DB backup (v1 mitigation for Render free tier ephemeral FS)
+# Admin: DB backup + restore
 # ---------------------------------------------------------------------------
+
+# The whole club's data is a few tens of KB. Anything past this is either a
+# mistake or someone trying to fill the disk, so read no further.
+MAX_RESTORE_BYTES = 32 * 1024 * 1024
+
+
+def _render_admin_backup(
+    request: Request,
+    *,
+    error: str | None = None,
+    restored: str | None = None,
+    status_code: int = 200,
+) -> HTMLResponse:
+    db_path = db.db_path()
+    safety_copies = [
+        {"name": p.name, "size_bytes": p.stat().st_size} for p in db.list_safety_copies()
+    ]
+    return _render(
+        request,
+        "admin/backup.html",
+        club=db.ensure_club(),
+        db_path=str(db_path),
+        size_bytes=db_path.stat().st_size if db_path.exists() else 0,
+        safety_copies=safety_copies,
+        error=error,
+        restored=restored,
+        status_code=status_code,
+    )
 
 
 @app.get("/admin/backup", response_class=HTMLResponse)
 def admin_backup(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
-    club = db.ensure_club()
-    db_path = db.db_path()
-    size_bytes = db_path.stat().st_size if db_path.exists() else 0
-    return _render(
-        request,
-        "admin/backup.html",
-        club=club,
-        db_path=str(db_path),
-        size_bytes=size_bytes,
-        backup_count=0,
-    )
+    return _render_admin_backup(request)
 
 
 @app.get("/admin/backup/download")
 def admin_backup_download(_gate: auth.AdminGate):
-    db_path = db.db_path()
-    if not db_path.exists():
+    """Serve a point-in-time copy, not the live file.
+
+    Streaming the database off disk while it's being written produces a torn
+    copy — one that can fail `integrity_check`, which you'd discover at restore
+    time. `db.snapshot_to` uses SQLite's backup API instead, and the temp file
+    is deleted once the response has been sent.
+    """
+    if not db.db_path().exists():
         raise HTTPException(status_code=404, detail="Database file not found")
-    # Run a checkpoint so any WAL changes are flushed into the main file first.
-    db.checkpoint()
-    timestamp = db.today_iso()
-    filename = f"bookclub-backup-{timestamp}.db"
-    return FileResponse(
-        path=str(db_path),
-        media_type="application/octet-stream",
-        filename=filename,
+    handle = tempfile.NamedTemporaryFile(
+        prefix="bookclub-backup-", suffix=".db", delete=False
     )
+    handle.close()
+    snapshot = Path(handle.name)
+    try:
+        db.snapshot_to(snapshot)
+    except Exception:
+        snapshot.unlink(missing_ok=True)
+        raise
+    return FileResponse(
+        path=str(snapshot),
+        media_type="application/octet-stream",
+        filename=f"bookclub-backup-{db.today_iso()}.db",
+        background=BackgroundTask(snapshot.unlink, missing_ok=True),
+    )
+
+
+@app.get("/admin/backup/copies/{name}")
+def admin_backup_copy_download(name: str, _gate: auth.AdminGate):
+    """Download a pre-restore snapshot.
+
+    `name` is matched against the enumerated copies rather than joined onto a
+    path, so there's nothing here for a `../` to grab.
+    """
+    for path in db.list_safety_copies():
+        if path.name == name:
+            return FileResponse(
+                path=str(path),
+                media_type="application/octet-stream",
+                filename=path.name,
+            )
+    raise HTTPException(status_code=404, detail="Snapshot not found")
+
+
+@app.post("/admin/backup/restore")
+def admin_backup_restore(
+    request: Request,
+    backup: UploadFile = File(...),
+    _gate: auth.AdminGate = ...,
+) -> HTMLResponse:
+    payload = backup.file.read(MAX_RESTORE_BYTES + 1)
+    if not payload:
+        return _render_admin_backup(
+            request,
+            error="Pick a .db file to restore first.",
+            status_code=400,
+        )
+    if len(payload) > MAX_RESTORE_BYTES:
+        return _render_admin_backup(
+            request,
+            error="That file is too big to be a book club backup.",
+            status_code=400,
+        )
+    try:
+        safety = db.restore_from_bytes(payload)
+    except db.InvalidBackup as exc:
+        return _render_admin_backup(request, error=str(exc), status_code=400)
+    return _render_admin_backup(request, restored=safety.name)

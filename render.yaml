@@ -3,10 +3,29 @@ services:
     name: 5418-bookclub
     runtime: python
     region: oregon
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    # Free tier + Litestream → Backblaze B2 for durable SQLite. No persistent
+    # disk (those require a paid instance). Cold starts (~1 min after idle)
+    # are unchanged — that is the free-tier tradeoff.
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      curl -sL https://github.com/benbjohnson/litestream/releases/download/v0.5.15/litestream-0.5.15-linux-x86_64.tar.gz | tar xz
+    # Restore from B2 if a replica exists, then run uvicorn under Litestream
+    # so Render's SIGTERM reaches Litestream and triggers a final sync.
+    # `-if-replica-exists` makes first boot (empty bucket) succeed cleanly.
+    startCommand: ./litestream restore -if-replica-exists -config litestream.yml $BOOKCLUB_DB_PATH && exec ./litestream replicate -config litestream.yml -exec "uvicorn app:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: ADMIN_PASSCODE_HASH
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      - key: BOOKCLUB_DB_PATH
+        # Writable path on the ephemeral filesystem. Litestream restores the
+        # real database here on every boot.
+        value: /opt/render/project/src/data/bookclub.db
+      - key: BOOKCLUB_TZ
+        value: America/Chicago
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APPLICATION_KEY
+        sync: false

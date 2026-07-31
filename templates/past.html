@@ -11,13 +11,18 @@
     <ul class="past-list past-list--public">
       {% for b in past %}
         <li class="past-row">
-          <a class="past-cover" href="{{ b.cover_url or '/static/img/cover-placeholder.svg' }}" target="_blank" rel="noopener">
-            <img src="{{ b.cover_url or '/static/img/cover-placeholder.svg' }}" alt="" loading="lazy" />
-          </a>
+          <div class="past-cover">
+            <img
+              src="{{ b.cover_url or '/static/img/cover-placeholder.svg' }}"
+              alt="Cover of {{ b.title }}"
+              loading="lazy"
+              onerror="this.onerror=null;this.src='/static/img/cover-placeholder.svg'"
+            />
+          </div>
           <div class="past-meta">
             <div class="past-title">{{ b.title }}</div>
             <div class="past-author">{{ b.author }}{% if b.publish_year %} · {{ b.publish_year }}{% endif %}</div>
-            <div class="past-dates">Finished {{ b.finished_on }}</div>
+            <div class="past-dates">Finished {{ b.finished_on|humandate }}</div>
             {% if b.notes %}
               <p class="past-notes">{{ b.notes }}</p>
             {% endif %}

@@ -36,6 +36,34 @@
       </form>
     </div>
   </article>
+
+  <section class="form-card form-card--wide" style="margin: 24px 0 0;">
+    <h2 class="section-title">Reading dates</h2>
+    {% if error %}
+      <div class="form-error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/admin/book/dates" class="stack-form">
+      <label>
+        Started on
+        <input type="date" name="started_on" value="{{ form_started_on }}" />
+      </label>
+
+      <label>
+        Read by — drives the countdown on the home page
+        <input type="date" name="read_by" value="{{ form_read_by }}" />
+      </label>
+
+      <p class="muted" style="margin: 0; font-size: 0.9rem;">
+        Leave a field empty to clear it. With no read-by date, the countdown
+        disappears from the home page.
+        {% if current.updated_at %}<br />Last changed {{ current.updated_at }}.{% endif %}
+      </p>
+
+      <div class="form-actions">
+        <button class="button" type="submit">Save dates</button>
+      </div>
+    </form>
+  </section>
 {% else %}
   <p class="muted">No current book set.</p>
   <form method="get" action="/admin/book/search" class="search-form">

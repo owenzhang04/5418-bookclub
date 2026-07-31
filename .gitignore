@@ -1,13 +1,12 @@
 # Secrets
 .env
+SECRETS_LOCAL.txt
 
 # Runtime
-data/*.db
-data/*.db-journal
-data/*.db-shm
-data/*.db-wal
+data/
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # venv
 .venv/
@@ -22,3 +21,7 @@ __pycache__/
 
 # Agent re-entry
 RESUME.md
+
+# Litestream binary downloaded at build time / for local testing
+/litestream
+litestream-*.tar.gz

@@ -3,11 +3,22 @@
 {% block admin_content %}
 <h1>Database backup</h1>
 <p class="muted">
-  On the Render free tier, the SQLite file is wiped on every redeploy.
-  Download a backup before you redeploy, then restore it after the new deploy comes up.
+  The database lives on Render's persistent disk, so it survives redeploys,
+  restarts, and instance sleeps. Download a copy anyway — a disk is one thing,
+  and a file on your laptop is another.
 </p>
 
-<section class="form-card" style="margin: 0; max-width: 640px;">
+{% if error %}
+  <div class="form-error">{{ error }}</div>
+{% endif %}
+{% if restored %}
+  <div class="form-success">
+    Restored. The database as it was a moment ago is saved as
+    <strong>{{ restored }}</strong> if you need to walk it back.
+  </div>
+{% endif %}
+
+<section class="form-card form-card--wide" style="margin: 0;">
   <h2 class="section-title">Current database</h2>
   <ul class="tile-stats">
     <li><strong>{{ db_path }}</strong></li>
@@ -18,15 +29,41 @@
   </p>
 </section>
 
-<section style="margin-top: 24px; max-width: 640px;">
-  <h2 class="section-title">How to restore</h2>
-  <ol style="line-height: 1.7; color: var(--ink-soft); font-size: 0.95rem;">
-    <li>Download the backup above <em>before</em> any deploy that touches the DB.</li>
-    <li>After a redeploy, log in here, then upload the .db file (v1.1 — for now, restore manually via the Render shell).</li>
-    <li>Or: just let Render do its thing, re-create the current book, and add the next meeting manually. Only ~3 minutes of work since the database is small.</li>
-  </ol>
-  <p class="muted" style="margin-top: 16px;">
-    <strong>v1.1 plan:</strong> persistent disk on Render, or a "Restore" upload form on this page. For now, the download button is the safety net.
+<section class="form-card form-card--wide" style="margin: 24px 0 0;">
+  <h2 class="section-title">Restore from a backup</h2>
+  <p class="muted" style="font-size: 0.9rem;">
+    Uploading replaces <em>everything</em> — books, meetings, RSVPs, members.
+    The current database is snapshotted first, so a mistake is recoverable.
   </p>
+  <form method="post" action="/admin/backup/restore" class="stack-form"
+        enctype="multipart/form-data"
+        onsubmit="return confirm('Replace the live database with this file? Everything currently on the site is overwritten.');">
+    <label>
+      Backup file (.db)
+      <input type="file" name="backup" accept=".db,application/octet-stream" required />
+    </label>
+    <div class="form-actions">
+      <button class="button" type="submit">Restore</button>
+    </div>
+  </form>
 </section>
+
+{% if safety_copies %}
+  <section class="form-card form-card--wide" style="margin: 24px 0 0;">
+    <h2 class="section-title">Pre-restore snapshots ({{ safety_copies|length }})</h2>
+    <p class="muted" style="font-size: 0.9rem;">
+      Taken automatically right before each restore, kept on the same disk.
+      Download the ones you care about — nothing prunes these but you.
+    </p>
+    <ul class="member-list">
+      {% for copy in safety_copies %}
+        <li>
+          <span class="member-name">{{ copy.name }}</span>
+          <span class="muted">{{ (copy.size_bytes / 1024)|round(1) }} KB</span>
+          <a class="card-link inline-form--end" href="/admin/backup/copies/{{ copy.name }}">Download →</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
 {% endblock %}

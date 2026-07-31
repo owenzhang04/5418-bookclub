@@ -2,25 +2,31 @@
 
 {% block admin_content %}
 <h1>Members</h1>
-<p class="muted">Names for reference. The iMessage group is the source of truth — this is just a roster.</p>
+<p class="muted">Names for the RSVP dropdown. The iMessage group is still the source of truth — this is the roster the form uses.</p>
+
+{% if saved %}
+  <div class="form-success" role="status">Saved.</div>
+{% endif %}
 
 <section class="member-form-card">
   <h2 class="section-title">Add a member</h2>
+  {% if error %}
+    <div class="form-error" role="alert" id="member-error">{{ error }}</div>
+  {% endif %}
   <form method="post" action="/admin/members" class="inline-form">
     <input
       type="text"
       name="name"
+      value="{{ form_name or '' }}"
       placeholder="e.g. Oz"
       required
       maxlength="80"
       autocomplete="off"
       aria-label="Member name"
+      {% if error %}aria-invalid="true" aria-describedby="member-error"{% endif %}
     />
     <button class="button" type="submit">Add</button>
   </form>
-  {% if error %}
-    <div class="form-error">{{ error }}</div>
-  {% endif %}
 </section>
 
 <h2 class="section-title">Current members ({{ members|length }})</h2>
@@ -29,15 +35,19 @@
     {% for m in members %}
       <li>
         <span class="member-name">{{ m.name }}</span>
-        <span class="muted">added {{ m.added_at }}</span>
+        <span class="muted">added {{ m.added_at|humandate }}</span>
+        {# The name goes in an attribute, not into the JS source. Interpolated
+           into the string literal, a member called O'Brien broke the handler
+           and the confirmation was skipped entirely — one click, no prompt. #}
         <form method="post" action="/admin/members/{{ m.id }}/delete" class="inline-form inline-form--end"
-              onsubmit="return confirm('Remove {{ m.name }} from the roster?');">
+              data-member-name="{{ m.name }}"
+              onsubmit="return confirm('Remove ' + this.dataset.memberName + ' from the roster?');">
           <button class="link-button link-button--danger" type="submit">Remove</button>
         </form>
       </li>
     {% endfor %}
   </ul>
 {% else %}
-  <p class="muted">No members yet. Add the first one above.</p>
+  <p class="muted">No members yet. Add the first one above so the RSVP form can offer a name list.</p>
 {% endif %}
 {% endblock %}

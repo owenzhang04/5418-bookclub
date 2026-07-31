@@ -2,26 +2,99 @@
 5418 Book Club — Render Deploy Checklist
 ========================================
 
-1. Go to https://dashboard.render.com/blueprints
-2. Click "New Blueprint Instance"
-3. Connect to your GitHub, pick the repo: owenzhang04/5418-bookclub
-4. Render will read render.yaml automatically
-5. Go to Environment → add:
+Persistence on the free tier uses Litestream → Backblaze B2.
+The SQLite file is restored from B2 on every boot and continuously
+replicated while the service is up. No Render persistent disk.
 
-   ADMIN_PASSCODE_HASH:
-   $2b$12$cfUKbCM9E5p3.KT9OKZNteaExus3vcr097NksVMHohrimrhh1dkfu
+Caveats (honest):
+- A write made within ~1 second of an abrupt kill can be lost.
+  Graceful shutdowns (deploys) sync cleanly.
+- Free-tier cold starts still take ~1 minute after 15 idle minutes.
+- The bucket MUST be private. Never make it public.
 
-   SESSION_SECRET:
-   vU314ou12lYEWhi1axkBzeiD66s3F7Yp7HmuTJtYxWo
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+1. Rotate secrets in the Render dashboard FIRST (if you haven't already)
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-6. Click "Apply" — first deploy ~3 minutes
+The old ADMIN_PASSCODE_HASH and SESSION_SECRET were committed to a
+public GitHub repo. New values live in the local gitignored file
+SECRETS_LOCAL.txt (and in your local .env). In the Render dashboard:
 
-Post-deploy:
-- Visit https://5418-bookclub.onrender.com (or whatever URL Render gives you)
-- Admin login: passcode = 5418
-- Check RSVP form works
-- Add a meeting to verify DB persists
+  Environment → edit ADMIN_PASSCODE_HASH and SESSION_SECRET → paste
+  the values from SECRETS_LOCAL.txt → Save Changes.
 
-NOTE: Free-tier filesystem is ephemeral. After every deploy,
-you'll need to re-seed the DB or use /admin/backup to download+restore.
-For $1/mo, Render persistent disk solves this.
+Render restarts automatically. Existing admin sessions are invalidated.
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+2. Create a Backblaze B2 bucket (no credit card required)
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+1. Sign up at https://www.backblaze.com/cloud-storage (B2 Cloud Storage)
+2. Buckets → Create a Bucket
+     - Name: 5418bookclub  (already created; litestream.yml matches)
+     - Files in Bucket are: Private
+     - Default encryption: enable if you want
+3. On the bucket details page, note the S3 endpoint, e.g.
+     s3.us-west-004.backblazeb2.com
+   The region is the middle segment: us-west-004
+4. App Keys → Add a New Application Key
+     - Name: bookclub-litestream
+     - Allow access to Bucket: ONLY the bucket you just created
+     - Type of Access: Read and Write
+     - Copy the keyID and applicationKey NOW — the secret is shown once
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+3. Point litestream.yml at your bucket region
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Edit litestream.yml in this repo and set:
+
+  endpoint: <the S3 endpoint from step 2.3>
+  region:   <the region segment from that hostname>
+  bucket:   <your bucket name if you didn't use the default>
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+4. Deploy / apply the blueprint
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+1. Push this repo to GitHub
+2. Render → Blueprints → New Blueprint Instance (or Manual Deploy if
+   the service already exists)
+3. Environment → set / verify:
+
+   ADMIN_PASSCODE_HASH:   (from SECRETS_LOCAL.txt)
+   SESSION_SECRET:        (from SECRETS_LOCAL.txt, or leave Render's
+                            generateValue alone if you already rotated)
+   BOOKCLUB_DB_PATH:      /opt/render/project/src/data/bookclub.db
+   BOOKCLUB_TZ:           America/Chicago
+   B2_KEY_ID:             (the keyID from step 2.4)
+   B2_APPLICATION_KEY:    (the applicationKey from step 2.4)
+
+   Do NOT set COOKIE_SECURE on Render — it defaults to on.
+
+4. Confirm Settings → Instance Type is Free, and Disks is empty
+   (we are not using a Render disk).
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+5. Verify persistence after deploy
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+- Visit the site URL. First load after idle may take ~1 minute (cold start).
+- Admin login with the shared passcode.
+- Logs should show Litestream sync / upload lines (e.g. "ltx file uploaded").
+- Add a meeting, wait ~10 seconds, then Manual Deploy → Clear build
+  cache & deploy. The meeting should still be there after boot.
+- Optionally: wait 20 minutes for spin-down, reload, confirm data survives.
+- /healthz returns {"ok": true} and nothing else.
+
+
+Admin passcode: see SECRETS_LOCAL.txt / your local .env — it is the
+shared club passcode (kept short by choice; login is rate-limited).
+
+If you ever use /admin/backup → Restore, Litestream keeps watching the
+same file (restore copies contents in place). If logs ever show
+"invalid wal header magic", hit Restart in the Render dashboard once.

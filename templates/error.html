@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} · {{ club.name }}{% endblock %}
+
+{% block content %}
+<section class="form-card form-card--wide">
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ detail }}</p>
+  <p>
+    <a class="button" href="/">← Back to home</a>
+    {% if is_admin %}
+      <a class="button button--ghost" href="/admin">Admin →</a>
+    {% endif %}
+  </p>
+  <p class="muted" style="font-size: 0.85rem; margin-bottom: 0;">Error {{ code }}</p>
+</section>
+{% endblock %}

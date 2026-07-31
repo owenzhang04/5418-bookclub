@@ -8,14 +8,19 @@
   <ul class="past-list">
     {% for b in past %}
       <li class="past-row">
-        <a class="past-cover" href="{{ b.cover_url or '/static/img/cover-placeholder.svg' }}" target="_blank" rel="noopener">
-          <img src="{{ b.cover_url or '/static/img/cover-placeholder.svg' }}" alt="" loading="lazy" />
-        </a>
+        <div class="past-cover">
+          <img
+            src="{{ b.cover_url or '/static/img/cover-placeholder.svg' }}"
+            alt="Cover of {{ b.title }}"
+            loading="lazy"
+            onerror="this.onerror=null;this.src='/static/img/cover-placeholder.svg'"
+          />
+        </div>
         <div class="past-meta">
           <div class="past-title">{{ b.title }}</div>
           <div class="past-author">{{ b.author }}{% if b.publish_year %} · {{ b.publish_year }}{% endif %}{% if b.page_count %} · {{ b.page_count }} pages{% endif %}</div>
           <div class="past-dates">
-            Read by <strong>{{ b.read_by or '?' }}</strong> · finished <strong>{{ b.finished_on }}</strong>
+            {% if b.read_by %}Read by <strong>{{ b.read_by|humandate }}</strong> · {% endif %}finished <strong>{{ b.finished_on|humandate }}</strong>
             {% if meeting_count_by_book[b.id] %}· {{ meeting_count_by_book[b.id] }} meeting{% if meeting_count_by_book[b.id] != 1 %}s{% endif %}{% endif %}
           </div>
           {% if b.notes %}
@@ -23,7 +28,7 @@
           {% endif %}
         </div>
         <div class="past-actions">
-          <a class="muted" href="/admin/meetings?past_book={{ b.id }}">View meetings</a>
+          <a class="muted" href="/admin/meetings">View meetings</a>
         </div>
       </li>
     {% endfor %}

@@ -1,8 +1,15 @@
-fastapi>=0.115
-uvicorn[standard]>=0.32
-jinja2>=3.1
-python-dotenv>=1.0
-bcrypt>=4.2
-itsdangerous>=2.2
-httpx>=0.27
-python-multipart>=0.0.9
+# Pinned exactly. Render reinstalls from scratch on every deploy, so a `>=`
+# floor means the code running in production isn't the code that was tested:
+# `fastapi>=0.115` had already resolved to 0.138.2 on starlette 1.3.1 here.
+# Bump these deliberately, after running the tests.
+fastapi==0.138.2
+# FastAPI's own pin is a range, and Starlette is where the request/response
+# behavior this app leans on actually lives.
+starlette==1.3.1
+uvicorn[standard]==0.49.0
+jinja2==3.1.6
+python-dotenv==1.2.2
+bcrypt==5.0.0
+itsdangerous==2.2.0
+httpx==0.28.1
+python-multipart==0.0.32

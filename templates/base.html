@@ -3,6 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {# Meeting pages carry a home address. Publicly linkable, not publicly findable. #}
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="description" content="{% block meta_description %}{{ club.name }} — current book, upcoming meetings, and RSVPs.{% endblock %}" />
+  <meta property="og:title" content="{% block og_title %}{{ club.name }}{% endblock %}" />
+  <meta property="og:description" content="{% block og_description %}Current book, upcoming meetings, and RSVPs.{% endblock %}" />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml" />
   <title>{% block title %}{{ club.name }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
@@ -10,11 +17,12 @@
   <header class="site-header">
     <div class="wrap">
       <a class="brand" href="/">
-        <span class="brand-mark">📚</span>
+        <span class="brand-mark" aria-hidden="true">📚</span>
         <span class="brand-name">{{ club.name }}</span>
       </a>
-      <nav class="site-nav">
+      <nav class="site-nav" aria-label="Site">
         <a href="/">Home</a>
+        <a href="/past">Past books</a>
         {% if is_admin %}
           <a href="/admin">Admin</a>
           <form method="post" action="/logout" class="inline-form">
@@ -33,7 +41,7 @@
 
   <footer class="site-footer">
     <div class="wrap">
-      <span class="muted">{{ club.name }} · est. {{ club.created_at[:10] }}</span>
+      <span class="muted">{{ club.name }} · est. {{ club.created_at[:10]|humandate }}</span>
     </div>
   </footer>
 </body>

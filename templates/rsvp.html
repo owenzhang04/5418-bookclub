@@ -8,50 +8,115 @@
   {% if meetings %}
     <p class="muted">Pick a meeting and let us know if you're in.</p>
 
-    <form method="post" action="/rsvp" class="stack-form">
+    {% if error %}
+      <div class="form-error" role="alert" id="rsvp-error">{{ error }}</div>
+    {% endif %}
+
+    {% if existing %}
+      <p class="form-success" role="status">
+        You're currently down as
+        <strong>{% if existing.response == 'yes' %}Yes{% elif existing.response == 'no' %}No{% else %}Maybe{% endif %}</strong>
+        for this meeting — submit again to change it.
+      </p>
+    {% endif %}
+
+    <form method="post" action="/rsvp" class="stack-form" id="rsvp-form">
       <label>
         Meeting
         <select name="meeting_id" required>
           {% for m in meetings %}
             <option value="{{ m.id }}" {% if selected and m.id == selected.id %}selected{% endif %}>
-              {{ m.date }}{% if m.time %} · {{ m.time }}{% endif %}{% if m.location %} · {{ m.location }}{% endif %}{% if m.book_title %} — {{ m.book_title }}{% endif %}
+              {{ m.date|humandate }}{% if m.time %} · {{ m.time }}{% endif %}{% if m.location %} · {{ m.location }}{% endif %}{% if m.book_title %} — {{ m.book_title }}{% endif %}
             </option>
           {% endfor %}
         </select>
       </label>
 
-      <label>
-        Your name
-        <input
-          type="text"
-          name="name"
-          autocomplete="given-name"
-          placeholder="How should we know you?"
-          required
-          maxlength="80"
-        />
-      </label>
+      {% if members %}
+        <label>
+          Your name
+          <select name="roster_name" id="roster-name" required>
+            <option value="" disabled {% if not roster_name %}selected{% endif %}>Choose your name…</option>
+            {% for mem in members %}
+              <option value="{{ mem.name }}" {% if roster_name == mem.name %}selected{% endif %}>{{ mem.name }}</option>
+            {% endfor %}
+            <option value="{{ guest_sentinel }}" {% if roster_name == guest_sentinel %}selected{% endif %}>
+              Someone else (guest)…
+            </option>
+          </select>
+        </label>
+        <label id="guest-name-wrap" {% if roster_name != guest_sentinel %}hidden{% endif %}>
+          Guest name
+          <input
+            type="text"
+            name="name"
+            id="guest-name"
+            value="{{ guest_name }}"
+            autocomplete="name"
+            placeholder="How should we know you?"
+            maxlength="80"
+            {% if roster_name == guest_sentinel %}required{% endif %}
+            {% if error %}aria-invalid="true" aria-describedby="rsvp-error"{% endif %}
+          />
+        </label>
+      {% else %}
+        <label>
+          Your name
+          <input
+            type="text"
+            name="name"
+            value="{{ guest_name }}"
+            autocomplete="name"
+            placeholder="How should we know you?"
+            required
+            maxlength="80"
+            {% if error %}aria-invalid="true" aria-describedby="rsvp-error"{% endif %}
+          />
+        </label>
+        <p class="muted">Tip for admins: add the roster under Admin → Members so people can pick their name.</p>
+      {% endif %}
 
       <fieldset class="rsvp-choices">
         <legend>Are you in?</legend>
         <label class="rsvp-radio">
-          <input type="radio" name="response" value="yes" required />
+          <input type="radio" name="response" value="yes" required {% if form_response == 'yes' %}checked{% endif %} />
           <span class="rsvp-yes">Yes</span>
         </label>
         <label class="rsvp-radio">
-          <input type="radio" name="response" value="maybe" />
+          <input type="radio" name="response" value="maybe" {% if form_response == 'maybe' %}checked{% endif %} />
           <span class="rsvp-maybe">Maybe</span>
         </label>
         <label class="rsvp-radio">
-          <input type="radio" name="response" value="no" />
+          <input type="radio" name="response" value="no" {% if form_response == 'no' %}checked{% endif %} />
           <span class="rsvp-no">No</span>
         </label>
       </fieldset>
 
       <button class="button" type="submit">Send RSVP</button>
     </form>
+
+    {% if members %}
+    <script>
+      (function () {
+        var select = document.getElementById("roster-name");
+        var wrap = document.getElementById("guest-name-wrap");
+        var input = document.getElementById("guest-name");
+        if (!select || !wrap || !input) return;
+        var guest = {{ guest_sentinel|tojson }};
+        function sync() {
+          var isGuest = select.value === guest;
+          wrap.hidden = !isGuest;
+          input.required = isGuest;
+          if (!isGuest) input.value = "";
+        }
+        select.addEventListener("change", sync);
+        sync();
+      })();
+    </script>
+    {% endif %}
   {% else %}
-    <p class="muted">No upcoming meetings to RSVP to yet. Check back later.</p>
+    <p class="muted">No upcoming meetings to RSVP to yet.</p>
+    <p><a class="button button--ghost" href="/past">Browse past books →</a></p>
   {% endif %}
 </section>
 {% endblock %}
