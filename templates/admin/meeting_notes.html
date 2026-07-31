@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>Meeting notes</h1>
+<p><a class="muted" href="/admin/meetings">← Back to meetings</a></p>
+
+<article class="meeting-summary">
+  <div>
+    <strong>{{ meeting.date }}</strong>{% if meeting.time %} · {{ meeting.time }}{% endif %}
+    {% if meeting.location %} · {{ meeting.location }}{% endif %}
+  </div>
+  {% if meeting.book_title %}<div class="muted">Discussing {{ meeting.book_title }}</div>{% endif %}
+  {% if not can_edit %}
+    <div class="form-error">Notes can only be added after the meeting date.</div>
+  {% endif %}
+</article>
+
+{% if error %}
+  <div class="form-error">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/admin/meetings/{{ meeting.id }}/notes" class="stack-form">
+  <label>
+    What happened, what people thought, what to read next, etc.
+    <textarea name="notes" rows="10" {% if not can_edit %}disabled{% endif %}
+              placeholder="Freeform. Markdown-lite.">{{ meeting.notes if meeting.notes else '' }}</textarea>
+  </label>
+  <div class="form-actions">
+    <button class="button" type="submit" {% if not can_edit %}disabled{% endif %}>Save notes</button>
+    <a class="button button--ghost" href="/admin/meetings">Cancel</a>
+  </div>
+</form>
+{% endblock %}

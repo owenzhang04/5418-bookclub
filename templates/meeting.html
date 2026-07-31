@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}{{ meeting.date }} · {{ club.name }}{% endblock %}
+
+{% block content %}
+{% set is_past = meeting.date < today %}
+{% set notes_visible = is_past and meeting.notes %}
+
+<article class="meeting-detail">
+  <a class="muted" href="/">← All meetings</a>
+  <h1>
+    {{ meeting.date }}{% if meeting.time %} · {{ meeting.time }}{% endif %}
+    {% if meeting.location %} · {{ meeting.location }}{% endif %}
+  </h1>
+
+  {% if meeting.book_title %}
+    <p class="meeting-book">Discussing <em>{{ meeting.book_title }}</em></p>
+  {% endif %}
+
+  {% if is_past and not meeting.notes %}
+    <p class="muted">This meeting has passed. Notes will appear here once an admin adds them.</p>
+  {% endif %}
+
+  <section class="meeting-section">
+    <h2>Agenda</h2>
+    {% if meeting.agenda %}
+      <p>{{ meeting.agenda }}</p>
+    {% else %}
+      <p class="muted">No agenda yet.</p>
+    {% endif %}
+  </section>
+
+  {% if meeting.discussion_questions %}
+    <section class="meeting-section">
+      <h2>Discussion questions</h2>
+      <ul class="questions">
+        {% for q in meeting.discussion_questions.split('\n') if q.strip() %}
+          <li>{{ q.strip() }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if notes_visible %}
+    <section class="meeting-section">
+      <h2>Notes</h2>
+      <p>{{ meeting.notes }}</p>
+    </section>
+  {% endif %}
+
+  {% if not is_past %}
+    <section class="meeting-section meeting-rsvp">
+      <h2>RSVP</h2>
+      <p>
+        <span class="rsvp-yes"><strong>{{ counts.yes }}</strong> yes</span> ·
+        <span class="rsvp-maybe"><strong>{{ counts.maybe }}</strong> maybe</span> ·
+        <span class="rsvp-no"><strong>{{ counts.no }}</strong> no</span>
+      </p>
+      <p>
+        <a class="button" href="/rsvp?meeting={{ meeting.id }}">RSVP →</a>
+      </p>
+      {% if rsvps %}
+        <details>
+          <summary class="muted">Who's in ({{ rsvps|length }})</summary>
+          <ul class="rsvp-list">
+            {% for r in rsvps %}
+              <li><span class="rsvp-{{ r.response }}">{{ r.response }}</span> · {{ r.name }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endif %}
+    </section>
+  {% endif %}
+</article>
+{% endblock %}

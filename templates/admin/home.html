@@ -1,0 +1,44 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>Admin home</h1>
+
+<div class="admin-grid">
+  <article class="admin-tile">
+    <div class="tile-eyebrow">Now reading</div>
+    {% if current %}
+      <div class="tile-title">{{ current.title }}</div>
+      <div class="muted">by {{ current.author }}</div>
+      <p><a class="button button--ghost" href="/admin/book">Change book →</a></p>
+    {% else %}
+      <div class="tile-title muted">No current book</div>
+      <p><a class="button" href="/admin/book">Set current book →</a></p>
+    {% endif %}
+  </article>
+
+  <article class="admin-tile">
+    <div class="tile-eyebrow">Next meeting</div>
+    {% if next_meeting %}
+      <div class="tile-title">{{ next_meeting.date }}{% if next_meeting.time %} · {{ next_meeting.time }}{% endif %}</div>
+      {% if next_meeting.location %}<div class="muted">{{ next_meeting.location }}</div>{% endif %}
+      <p>
+        <a class="button button--ghost" href="/admin/meetings">All meetings →</a>
+        <a class="button button--ghost" href="/admin/meetings/{{ next_meeting.id }}/edit">Edit →</a>
+      </p>
+    {% else %}
+      <div class="tile-title muted">None scheduled</div>
+      <p><a class="button" href="/admin/meetings/new">Add a meeting →</a></p>
+    {% endif %}
+  </article>
+
+  <article class="admin-tile">
+    <div class="tile-eyebrow">Counts</div>
+    <ul class="tile-stats">
+      <li><strong>{{ counts.books }}</strong> books</li>
+      <li><strong>{{ counts.meetings }}</strong> meetings</li>
+      <li><strong>{{ counts.rsvps }}</strong> RSVPs</li>
+      <li><strong>{{ counts.members }}</strong> members</li>
+    </ul>
+  </article>
+</div>
+{% endblock %}

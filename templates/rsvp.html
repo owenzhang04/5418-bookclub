@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}RSVP · {{ club.name }}{% endblock %}
+
+{% block content %}
+<section class="form-card form-card--wide">
+  <h1>RSVP</h1>
+  {% if meetings %}
+    <p class="muted">Pick a meeting and let us know if you're in.</p>
+
+    <form method="post" action="/rsvp" class="stack-form">
+      <label>
+        Meeting
+        <select name="meeting_id" required>
+          {% for m in meetings %}
+            <option value="{{ m.id }}" {% if selected and m.id == selected.id %}selected{% endif %}>
+              {{ m.date }}{% if m.time %} · {{ m.time }}{% endif %}{% if m.location %} · {{ m.location }}{% endif %}{% if m.book_title %} — {{ m.book_title }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        Your name
+        <input
+          type="text"
+          name="name"
+          autocomplete="given-name"
+          placeholder="How should we know you?"
+          required
+          maxlength="80"
+        />
+      </label>
+
+      <fieldset class="rsvp-choices">
+        <legend>Are you in?</legend>
+        <label class="rsvp-radio">
+          <input type="radio" name="response" value="yes" required />
+          <span class="rsvp-yes">Yes</span>
+        </label>
+        <label class="rsvp-radio">
+          <input type="radio" name="response" value="maybe" />
+          <span class="rsvp-maybe">Maybe</span>
+        </label>
+        <label class="rsvp-radio">
+          <input type="radio" name="response" value="no" />
+          <span class="rsvp-no">No</span>
+        </label>
+      </fieldset>
+
+      <button class="button" type="submit">Send RSVP</button>
+    </form>
+  {% else %}
+    <p class="muted">No upcoming meetings to RSVP to yet. Check back later.</p>
+  {% endif %}
+</section>
+{% endblock %}

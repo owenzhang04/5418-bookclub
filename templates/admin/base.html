@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Admin · {{ club.name }}{% endblock %}
+
+{% block content %}
+<nav class="admin-nav">
+  <a href="/admin">Home</a>
+  <a href="/admin/book">Book</a>
+  <a href="/admin/meetings">Meetings</a>
+  <a href="/admin/past">Past books</a>
+  <a href="/admin/members">Members</a>
+  <a href="/admin/backup">Backup</a>
+  <a href="/">View site →</a>
+</nav>
+
+{% block admin_content %}{% endblock %}
+{% endblock %}

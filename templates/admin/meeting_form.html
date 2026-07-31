@@ -1,0 +1,59 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>{% if meeting %}Edit meeting{% else %}New meeting{% endif %}</h1>
+<p><a class="muted" href="/admin/meetings">← Back to meetings</a></p>
+
+{% if error %}
+  <div class="form-error">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="{% if meeting %}/admin/meetings/{{ meeting.id }}{% else %}/admin/meetings{% endif %}" class="stack-form">
+  <label>
+    Date
+    <input type="date" name="date" value="{{ meeting.date if meeting else '' }}" required />
+  </label>
+
+  <label>
+    Time (optional)
+    <input type="time" name="time" value="{{ meeting.time if meeting and meeting.time else '' }}" />
+  </label>
+
+  <label>
+    Location (optional)
+    <input type="text" name="location" value="{{ meeting.location if meeting and meeting.location else '' }}"
+           placeholder="e.g. Oz's place, or a venue" maxlength="120" />
+  </label>
+
+  <label>
+    Book (optional)
+    <select name="book_id">
+      <option value="">— No specific book —</option>
+      {% for b in books %}
+        <option value="{{ b.id }}"
+                {% if meeting and meeting.book_id == b.id %}selected{% endif %}>
+          {{ b.title }} — {{ b.author }}
+          {% if b.finished_on %}(finished {{ b.finished_on }}){% else %}(current){% endif %}
+        </option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    Agenda (optional)
+    <textarea name="agenda" rows="3"
+              placeholder="What we'll cover, what to bring, etc.">{{ meeting.agenda if meeting and meeting.agenda else '' }}</textarea>
+  </label>
+
+  <label>
+    Discussion questions (optional, one per line)
+    <textarea name="discussion_questions" rows="5"
+              placeholder="One question per line">{{ meeting.discussion_questions if meeting and meeting.discussion_questions else '' }}</textarea>
+  </label>
+
+  <div class="form-actions">
+    <button class="button" type="submit">{% if meeting %}Save changes{% else %}Create meeting{% endif %}</button>
+    <a class="button button--ghost" href="/admin/meetings">Cancel</a>
+  </div>
+</form>
+{% endblock %}

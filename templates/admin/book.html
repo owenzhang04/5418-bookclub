@@ -1,0 +1,52 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>Current book</h1>
+
+{% if current %}
+  <article class="book-current">
+    {% if current.cover_url %}
+      <img class="book-cover" src="{{ current.cover_url }}" alt="Cover of {{ current.title }}" />
+    {% else %}
+      <div class="cover-placeholder">{{ current.title[:1] }}</div>
+    {% endif %}
+    <div>
+      <h2 style="margin-top:0;">{{ current.title }}</h2>
+      <p class="muted">by {{ current.author }}</p>
+      <ul class="hero-stats">
+        {% if current.page_count %}<li><strong>{{ current.page_count }}</strong> pages</li>{% endif %}
+        {% if current.publish_year %}<li>first published <strong>{{ current.publish_year }}</strong></li>{% endif %}
+        {% if current.started_on %}<li>started <strong>{{ current.started_on }}</strong></li>{% endif %}
+        {% if current.read_by %}<li>read by <strong>{{ current.read_by }}</strong></li>{% endif %}
+      </ul>
+      <form method="get" action="/admin/book/search" class="search-form">
+        <input
+          type="search"
+          name="q"
+          placeholder="Search Open Library to change…"
+          aria-label="Search Open Library"
+        />
+        <button class="button" type="submit">Search</button>
+      </form>
+      <form method="post" action="/admin/book/finish" class="inline-form" style="margin-top: 12px;">
+        <button class="button button--ghost" type="submit"
+                onclick="return confirm('Mark this book as finished? It will move to Past books.');">
+          Mark as finished →
+        </button>
+      </form>
+    </div>
+  </article>
+{% else %}
+  <p class="muted">No current book set.</p>
+  <form method="get" action="/admin/book/search" class="search-form">
+    <input
+      type="search"
+      name="q"
+      placeholder="Search Open Library for a book…"
+      autofocus
+      required
+    />
+    <button class="button" type="submit">Search</button>
+  </form>
+{% endif %}
+{% endblock %}

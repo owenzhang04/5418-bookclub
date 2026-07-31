@@ -1,0 +1,44 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>Search results for “{{ query }}”</h1>
+<p><a class="muted" href="/admin/book">← Back to current book</a></p>
+
+{% if error %}
+  <div class="form-error">{{ error }}</div>
+{% endif %}
+
+{% if results %}
+  <div class="search-results">
+    {% for r in results %}
+      <article class="search-row">
+        {% if r.cover_url %}
+          <img class="search-cover" src="{{ r.cover_url }}" alt="" />
+        {% else %}
+          <div class="search-cover search-cover--placeholder">{{ r.title[:1] }}</div>
+        {% endif %}
+        <div class="search-meta">
+          <div class="search-title">{{ r.title }}</div>
+          <div class="muted">by {{ r.author }}{% if r.publish_year %} · {{ r.publish_year }}{% endif %}{% if r.page_count %} · {{ r.page_count }} pages{% endif %}</div>
+        </div>
+        <form method="post" action="/admin/book" class="inline-form">
+          <input type="hidden" name="open_library_key" value="{{ r.key or '' }}" />
+          <input type="hidden" name="title" value="{{ r.title }}" />
+          <input type="hidden" name="author" value="{{ r.author }}" />
+          <input type="hidden" name="cover_url" value="{{ r.cover_url or '' }}" />
+          <input type="hidden" name="publish_year" value="{{ r.publish_year or '' }}" />
+          <input type="hidden" name="page_count" value="{{ r.page_count or '' }}" />
+          <button class="button" type="submit">Set as current →</button>
+        </form>
+      </article>
+    {% endfor %}
+  </div>
+{% elif not error %}
+  <p class="muted">No matches. Try a different title.</p>
+{% endif %}
+
+<form method="get" action="/admin/book/search" class="search-form" style="margin-top: 24px;">
+  <input type="search" name="q" value="{{ query }}" autofocus />
+  <button class="button" type="submit">Search again</button>
+</form>
+{% endblock %}

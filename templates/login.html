@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Admin login · {{ club.name }}{% endblock %}
+
+{% block content %}
+<section class="form-card">
+  <h1>Admin login</h1>
+  <p class="muted">Enter the shared admin passcode.</p>
+
+  {% if error %}
+    <div class="form-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/login" class="stack-form">
+    {% if next %}
+      <input type="hidden" name="next" value="{{ next }}" />
+    {% endif %}
+    <label>
+      Passcode
+      <input
+        type="password"
+        name="passcode"
+        autocomplete="current-password"
+        autofocus
+        required
+      />
+    </label>
+    <button class="button" type="submit">Log in</button>
+  </form>
+</section>
+{% endblock %}

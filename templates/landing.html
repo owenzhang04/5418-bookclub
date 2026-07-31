@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# Current book hero #}
+{% if current %}
+  <section class="hero">
+    <div class="hero-cover">
+      {% if current.cover_url %}
+        <img src="{{ current.cover_url }}" alt="Cover of {{ current.title }}" />
+      {% else %}
+        <div class="cover-placeholder">{{ current.title[:1] }}</div>
+      {% endif %}
+    </div>
+    <div class="hero-meta">
+      <div class="eyebrow">Now reading</div>
+      <h1 class="hero-title">{{ current.title }}</h1>
+      <p class="hero-author">by {{ current.author }}</p>
+      <ul class="hero-stats">
+        {% if current.page_count %}<li><strong>{{ current.page_count }}</strong> pages</li>{% endif %}
+        {% if current.publish_year %}<li>first published <strong>{{ current.publish_year }}</strong></li>{% endif %}
+        {% if current.started_on %}<li>started <strong>{{ current.started_on }}</strong></li>{% endif %}
+        {% if current.read_by %}<li>read by <strong>{{ current.read_by }}</strong></li>{% endif %}
+      </ul>
+      {% if countdown %}
+        <div class="hero-countdown hero-countdown--{{ countdown.bucket }}">
+          <span class="countdown-dot"></span>
+          {{ countdown.label }}
+        </div>
+      {% endif %}
+    </div>
+  </section>
+{% else %}
+  <section class="hero hero--empty">
+    <h1>No current book yet.</h1>
+    {% if is_admin %}
+      <p><a class="button" href="/admin/book">Set the current book →</a></p>
+    {% else %}
+      <p class="muted">Ask an admin to set the current book.</p>
+    {% endif %}
+  </section>
+{% endif %}
+
+{# Upcoming meetings #}
+<section class="section">
+  <h2 class="section-title">Upcoming meetings</h2>
+  {% if upcoming %}
+    <div class="card-grid">
+      {% for m in upcoming %}
+        {% set c = counts.get(m['id'], {'yes': 0, 'no': 0, 'maybe': 0}) %}
+        <article class="card">
+          <div class="card-date">
+            <div class="card-date-day">{{ m.date[8:] }}</div>
+            <div class="card-date-mon">
+              {% set months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+              {{ months[m.date[5:7]|int] }}
+            </div>
+          </div>
+          <div class="card-body">
+            <h3 class="card-title">
+              {% if m.time %}{{ m.time }}{% else %}All day{% endif %}
+              {% if m.location %} · {{ m.location }}{% endif %}
+            </h3>
+            {% if m.book_title %}
+              <p class="card-book">Discussing <em>{{ m.book_title }}</em></p>
+            {% endif %}
+            <p class="card-rsvps">
+              <span class="rsvp-yes">{{ c.yes }} yes</span> ·
+              <span class="rsvp-maybe">{{ c.maybe }} maybe</span> ·
+              <span class="rsvp-no">{{ c.no }} no</span>
+            </p>
+            <a class="card-link" href="/rsvp?meeting={{ m.id }}">RSVP →</a>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No meetings scheduled yet.</p>
+  {% endif %}
+</section>
+
+{# Past books #}
+{% if past_books %}
+  <section class="section">
+    <h2 class="section-title">Past books</h2>
+    <ul class="past-list">
+      {% for b in past_books %}
+        <li>
+          <span class="past-title">{{ b.title }}</span>
+          <span class="muted"> — {{ b.author }} · finished {{ b.finished_on }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+    <p style="margin-top: 14px;"><a class="card-link" href="/past">See the full archive →</a></p>
+  </section>
+{% endif %}
+
+{% endblock %}

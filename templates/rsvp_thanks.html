@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Thanks · {{ club.name }}{% endblock %}
+
+{% block content %}
+<section class="form-card form-card--wide">
+  <h1>Got it ✓</h1>
+  <p>
+    <strong>{{ name }}</strong> · <span class="rsvp-{{ response }}">{{ response_label }}</span>
+    for the meeting on <strong>{{ meeting.date }}{% if meeting.time %} at {{ meeting.time }}{% endif %}</strong>{% if meeting.location %} at {{ meeting.location }}{% endif %}.
+  </p>
+  <p>
+    <a class="button" href="/">← Back to home</a>
+    <a class="button button--ghost" href="/rsvp?meeting={{ meeting.id }}">RSVP again or change your mind →</a>
+  </p>
+</section>
+{% endblock %}

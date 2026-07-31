@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Past books · {{ club.name }}{% endblock %}
+
+{% block content %}
+<section class="public-past">
+  <h1>Past books</h1>
+  <p class="muted">Everything the club has read so far.</p>
+
+  {% if past %}
+    <ul class="past-list past-list--public">
+      {% for b in past %}
+        <li class="past-row">
+          <a class="past-cover" href="{{ b.cover_url or '/static/img/cover-placeholder.svg' }}" target="_blank" rel="noopener">
+            <img src="{{ b.cover_url or '/static/img/cover-placeholder.svg' }}" alt="" loading="lazy" />
+          </a>
+          <div class="past-meta">
+            <div class="past-title">{{ b.title }}</div>
+            <div class="past-author">{{ b.author }}{% if b.publish_year %} · {{ b.publish_year }}{% endif %}</div>
+            <div class="past-dates">Finished {{ b.finished_on }}</div>
+            {% if b.notes %}
+              <p class="past-notes">{{ b.notes }}</p>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">No past books yet. Check back after the first meeting.</p>
+  {% endif %}
+
+  <p><a class="button button--ghost" href="/">← Back to home</a></p>
+</section>
+{% endblock %}

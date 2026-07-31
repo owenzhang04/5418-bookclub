@@ -1,0 +1,43 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>Members</h1>
+<p class="muted">Names for reference. The iMessage group is the source of truth — this is just a roster.</p>
+
+<section class="member-form-card">
+  <h2 class="section-title">Add a member</h2>
+  <form method="post" action="/admin/members" class="inline-form">
+    <input
+      type="text"
+      name="name"
+      placeholder="e.g. Oz"
+      required
+      maxlength="80"
+      autocomplete="off"
+      aria-label="Member name"
+    />
+    <button class="button" type="submit">Add</button>
+  </form>
+  {% if error %}
+    <div class="form-error">{{ error }}</div>
+  {% endif %}
+</section>
+
+<h2 class="section-title">Current members ({{ members|length }})</h2>
+{% if members %}
+  <ul class="member-list">
+    {% for m in members %}
+      <li>
+        <span class="member-name">{{ m.name }}</span>
+        <span class="muted">added {{ m.added_at }}</span>
+        <form method="post" action="/admin/members/{{ m.id }}/delete" class="inline-form inline-form--end"
+              onsubmit="return confirm('Remove {{ m.name }} from the roster?');">
+          <button class="link-button link-button--danger" type="submit">Remove</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="muted">No members yet. Add the first one above.</p>
+{% endif %}
+{% endblock %}

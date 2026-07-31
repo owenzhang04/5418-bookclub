@@ -1,0 +1,55 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>Meetings</h1>
+<p><a class="button" href="/admin/meetings/new">+ New meeting</a></p>
+
+<h2 class="section-title">Upcoming</h2>
+{% if upcoming %}
+  <ul class="admin-list">
+    {% for m in upcoming %}
+      <li>
+        <div>
+          <strong>{{ m.date }}</strong>{% if m.time %} · {{ m.time }}{% endif %}
+          {% if m.location %} · {{ m.location }}{% endif %}
+          {% if m.book_title %} <span class="muted">— {{ m.book_title }}</span>{% endif %}
+        </div>
+        <div class="admin-list-actions">
+          <a class="muted" href="/meetings/{{ m.id }}">View</a>
+          <a class="muted" href="/admin/meetings/{{ m.id }}/edit">Edit</a>
+          <form method="post" action="/admin/meetings/{{ m.id }}/delete" class="inline-form"
+                onsubmit="return confirm('Delete this meeting?');">
+            <button class="link-button link-button--danger" type="submit">Delete</button>
+          </form>
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="muted">None scheduled.</p>
+{% endif %}
+
+<h2 class="section-title">Past</h2>
+{% if past %}
+  <ul class="admin-list">
+    {% for m in past %}
+      <li>
+        <div>
+          <strong>{{ m.date }}</strong>{% if m.time %} · {{ m.time }}{% endif %}
+          {% if m.location %} · {{ m.location }}{% endif %}
+          {% if m.book_title %} <span class="muted">— {{ m.book_title }}</span>{% endif %}
+        </div>
+        <div class="admin-list-actions">
+          <a class="muted" href="/meetings/{{ m.id }}">View</a>
+          <a class="muted" href="/admin/meetings/{{ m.id }}/notes">
+            {% if m.notes %}Edit notes{% else %}Add notes{% endif %}
+          </a>
+          <a class="muted" href="/admin/meetings/{{ m.id }}/edit">Edit</a>
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="muted">None yet.</p>
+{% endif %}
+{% endblock %}

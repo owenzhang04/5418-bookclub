@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<h1>Database backup</h1>
+<p class="muted">
+  On the Render free tier, the SQLite file is wiped on every redeploy.
+  Download a backup before you redeploy, then restore it after the new deploy comes up.
+</p>
+
+<section class="form-card" style="margin: 0; max-width: 640px;">
+  <h2 class="section-title">Current database</h2>
+  <ul class="tile-stats">
+    <li><strong>{{ db_path }}</strong></li>
+    <li><strong>{{ (size_bytes / 1024)|round(1) }}</strong> KB</li>
+  </ul>
+  <p style="margin-top: 18px;">
+    <a class="button" href="/admin/backup/download">↓ Download {{ club.name }}.db</a>
+  </p>
+</section>
+
+<section style="margin-top: 24px; max-width: 640px;">
+  <h2 class="section-title">How to restore</h2>
+  <ol style="line-height: 1.7; color: var(--ink-soft); font-size: 0.95rem;">
+    <li>Download the backup above <em>before</em> any deploy that touches the DB.</li>
+    <li>After a redeploy, log in here, then upload the .db file (v1.1 — for now, restore manually via the Render shell).</li>
+    <li>Or: just let Render do its thing, re-create the current book, and add the next meeting manually. Only ~3 minutes of work since the database is small.</li>
+  </ol>
+  <p class="muted" style="margin-top: 16px;">
+    <strong>v1.1 plan:</strong> persistent disk on Render, or a "Restore" upload form on this page. For now, the download button is the safety net.
+  </p>
+</section>
+{% endblock %}

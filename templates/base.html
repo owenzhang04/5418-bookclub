@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ club.name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <span class="brand-mark">📚</span>
+        <span class="brand-name">{{ club.name }}</span>
+      </a>
+      <nav class="site-nav">
+        <a href="/">Home</a>
+        {% if is_admin %}
+          <a href="/admin">Admin</a>
+          <form method="post" action="/logout" class="inline-form">
+            <button class="link-button" type="submit">Log out</button>
+          </form>
+        {% else %}
+          <a class="muted" href="/login">Admin login</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span class="muted">{{ club.name }} · est. {{ club.created_at[:10] }}</span>
+    </div>
+  </footer>
+</body>
+</html>
