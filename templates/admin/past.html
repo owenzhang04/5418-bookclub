@@ -3,6 +3,7 @@
 {% block admin_content %}
 <h1>Past books</h1>
 <p class="muted">An archive of books you've already read.</p>
+<p><a class="button" href="/admin/past/new">+ Add past book</a></p>
 
 {% if saved %}
   <div class="form-success" role="status">Saved.</div>
@@ -39,7 +40,6 @@
     {% endfor %}
   </ul>
 {% else %}
-  <p class="muted">No past books yet. Mark a book as finished on the <a href="/admin/book">book page</a>.</p>
+  <p class="muted">No past books yet. <a href="/admin/past/new">Add one</a>, or mark the current book as finished on the <a href="/admin/book">book page</a>.</p>
 {% endif %}
 {% endblock %}
-

@@ -1027,7 +1027,7 @@ def _get_past_book_or_404(book_id: int) -> sqlite3.Row:
 def _render_past_book_form(
     request: Request,
     *,
-    book: sqlite3.Row,
+    book: sqlite3.Row | None,
     form: dict,
     error: str | None = None,
     status_code: int = 200,
@@ -1074,10 +1074,10 @@ def _validate_past_book_form(form: dict) -> str | None:
     except ValueError:
         return "Dates need to be real calendar dates (YYYY-MM-DD)."
 
-    # Finished-on is what keeps the row in the archive. Blanking it here would
-    # quietly create a second "current" book; require it, and offer Make current.
+    # Finished-on is what keeps the row in the archive. Blanking it on edit
+    # would quietly create a second "current" book; require it always.
     if finished is None:
-        return "Finished on is required for a past book. Use “Return to current” to clear it."
+        return "Finished on is required for a past book."
 
     if started and read_by and read_by < started:
         return "The read-by date can't be before the start date."
@@ -1109,6 +1109,63 @@ def admin_past(
         past=past,
         meeting_count_by_book=db.meeting_counts_by_book(b["id"] for b in past),
         saved=bool(saved),
+    )
+
+
+@app.get("/admin/past/new", response_class=HTMLResponse)
+def admin_past_new(request: Request, _gate: auth.AdminGate) -> HTMLResponse:
+    return _render_past_book_form(request, book=None, form=_past_book_form())
+
+
+@app.post("/admin/past")
+def admin_past_create(
+    request: Request,
+    title: str = Form(default=""),
+    author: str = Form(default=""),
+    cover_url: str = Form(default=""),
+    page_count: str = Form(default=""),
+    publish_year: str = Form(default=""),
+    started_on: str = Form(default=""),
+    read_by: str = Form(default=""),
+    finished_on: str = Form(default=""),
+    notes: str = Form(default=""),
+    _gate: auth.AdminGate = ...,
+):
+    form = _past_book_form(
+        title=title,
+        author=author,
+        cover_url=cover_url,
+        page_count=page_count,
+        publish_year=publish_year,
+        started_on=started_on,
+        read_by=read_by,
+        finished_on=finished_on,
+        notes=notes,
+    )
+    error = _validate_past_book_form(form)
+    if error is not None:
+        form["started_on"] = started_on
+        form["read_by"] = read_by
+        form["finished_on"] = finished_on
+        return _render_past_book_form(
+            request, book=None, form=form, error=error, status_code=400
+        )
+
+    pages, _ = _parse_optional_int_field(form["page_count"], "Page count")
+    year, _ = _parse_optional_int_field(form["publish_year"], "Publish year")
+    db.add_book(
+        title=form["title"],
+        author=form["author"],
+        cover_url=form["cover_url"] or None,
+        page_count=pages,
+        publish_year=year,
+        started_on=form["started_on"] or None,
+        read_by=form["read_by"] or None,
+        finished_on=form["finished_on"],
+        notes=form["notes"] or None,
+    )
+    return RedirectResponse(
+        url="/admin/past?saved=1", status_code=status.HTTP_303_SEE_OTHER
     )
 
 
