@@ -165,3 +165,95 @@ def test_make_current_archives_the_other_current(admin):
     assert current["finished_on"] is None
     archived = db.get_book(new_current["id"])
     assert archived["finished_on"] is not None
+
+
+def test_past_list_links_to_new(admin):
+    response = admin.get("/admin/past")
+    assert response.status_code == 200
+    assert '/admin/past/new' in response.text
+    assert "+ Add past book" in response.text
+
+
+def test_new_form_renders(admin):
+    response = admin.get("/admin/past/new")
+    assert response.status_code == 200
+    assert "Add past book" in response.text
+    assert 'action="/admin/past"' in response.text
+    assert "Return to current" not in response.text
+
+
+def test_create_past_book(admin):
+    before_current = db.get_current_book()
+    assert before_current is not None
+    before_id = before_current["id"]
+
+    response = admin.post(
+        "/admin/past",
+        data={
+            "title": "Historical Classic",
+            "author": "Old Author",
+            "cover_url": "https://example.com/old.jpg",
+            "page_count": "200",
+            "publish_year": "1985",
+            "started_on": "2025-01-01",
+            "read_by": "2025-01-31",
+            "finished_on": "2025-02-15",
+            "notes": "We read this last year.",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/past?saved=1"
+
+    past = db.list_past_books()
+    created = next(b for b in past if b["title"] == "Historical Classic")
+    assert created["author"] == "Old Author"
+    assert created["cover_url"] == "https://example.com/old.jpg"
+    assert created["page_count"] == 200
+    assert created["publish_year"] == 1985
+    assert created["started_on"] == "2025-01-01"
+    assert created["read_by"] == "2025-01-31"
+    assert created["finished_on"] == "2025-02-15"
+    assert created["notes"] == "We read this last year."
+
+    current = db.get_current_book()
+    assert current is not None
+    assert current["id"] == before_id
+    assert current["finished_on"] is None
+
+    listing = admin.get("/admin/past?saved=1")
+    assert "Saved." in listing.text
+    assert "Historical Classic" in listing.text
+
+
+def test_create_blank_title_is_rejected(admin):
+    before = list(db.list_past_books())
+    response = admin.post(
+        "/admin/past",
+        data={
+            "title": "   ",
+            "author": "Someone",
+            "finished_on": "2025-06-01",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert "need a title" in response.text
+    assert 'value="Someone"' in response.text
+    assert len(db.list_past_books()) == len(before)
+
+
+def test_create_blank_finished_on_is_rejected(admin):
+    before = list(db.list_past_books())
+    response = admin.post(
+        "/admin/past",
+        data={
+            "title": "No Finish Date",
+            "author": "Someone",
+            "finished_on": "",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert "Finished on is required" in response.text
+    assert len(db.list_past_books()) == len(before)
