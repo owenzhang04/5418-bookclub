@@ -1,5 +1,9 @@
 # 5418 Book Club
 
+![5418 Book Club landing page](docs/preview.png)
+
+*Landing page with demo data: the current book and an upcoming meeting with RSVP counts.*
+
 A small deployed website for the 5418 Book Club (~15 members). Public landing shows the current book and upcoming meetings; members RSVP by name. Admin section is gated by a shared passcode.
 
 ## Live site
